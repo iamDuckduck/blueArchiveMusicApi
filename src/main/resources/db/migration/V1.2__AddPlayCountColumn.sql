@@ -1,0 +1,2 @@
+ALTER TABLE ost
+ADD COLUMN play_count INTEGER NOT NULL DEFAULT 0 CHECK (play_count >= 0);

@@ -1,0 +1,8 @@
+package com.ba.bluearchivemusicapi.repositories;
+
+import com.ba.bluearchivemusicapi.entities.OstType;
+import org.springframework.data.repository.CrudRepository;
+
+public interface OstTypeRepository extends CrudRepository<OstType, Long> {
+    OstType findByName(String name);
+}

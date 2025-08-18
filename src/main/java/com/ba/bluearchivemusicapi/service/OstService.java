@@ -19,6 +19,7 @@ import com.ba.bluearchivemusicapi.repositories.OstTypeRepository;
 import com.ba.bluearchivemusicapi.specifications.OstSpecifications;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -93,7 +94,7 @@ public class OstService {
         return cloudflareUtil.generatePresignedDownloadUrl(bucket, key, Duration.ofMinutes(15));
     }
 
-
+    @Cacheable(value = "audioUrls", key = "#id")
     public String getAudioById(Long id) {
         OST ost = ostRepository.findById(id)
                 .orElseThrow(() -> new OstNotFoundException(MessageConstant.OST_NOT_FOUND));

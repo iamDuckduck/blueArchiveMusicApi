@@ -38,6 +38,10 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
+import static com.ba.bluearchivemusicapi.common.constant.CacheConstants.AUDIO_URL_CACHE;
+import static com.ba.bluearchivemusicapi.common.constant.CloudflareConstant.OST_AUDIO_EXPIRATION;
+import static com.ba.bluearchivemusicapi.common.constant.CloudflareConstant.OST_IMAGE_EXPIRATION;
+
 
 @Service
 @RequiredArgsConstructor
@@ -91,17 +95,17 @@ public class OstService {
 
         String key = ost.getImage_path();
 
-        return cloudflareUtil.generatePresignedDownloadUrl(bucket, key, Duration.ofMinutes(15));
+        return cloudflareUtil.generatePresignedDownloadUrl(bucket, key, OST_IMAGE_EXPIRATION);
     }
 
-    @Cacheable(value = "audioUrls", key = "#id")
+    @Cacheable(value = AUDIO_URL_CACHE, key = "#id")
     public String getAudioById(Long id) {
         OST ost = ostRepository.findById(id)
                 .orElseThrow(() -> new OstNotFoundException(MessageConstant.OST_NOT_FOUND));
 
         String key = ost.getAudio_path();
 
-        return cloudflareUtil.generatePresignedDownloadUrl(bucket, key, Duration.ofMinutes(15));
+        return cloudflareUtil.generatePresignedDownloadUrl(bucket, key, OST_AUDIO_EXPIRATION);
     }
 
     public Page<OstPageDTO> pageQuery(Integer page, Integer size, String sortField, String sortDirection, String filterField, String filterValue) {

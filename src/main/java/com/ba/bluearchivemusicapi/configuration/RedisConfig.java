@@ -7,22 +7,40 @@ import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
+import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
+
+import static com.ba.bluearchivemusicapi.common.constant.CacheConstants.*;
 
 @Configuration
 public class RedisConfig {
     @Bean
     public RedisCacheManager cacheManager(RedisConnectionFactory redisConnectionFactory) {
+        // default setting
         RedisCacheConfiguration redisCacheConfiguration = RedisCacheConfiguration.defaultCacheConfig()
-                .entryTtl(Duration.ofMinutes(10))
+                .entryTtl(DEFAULT_CACHE_TTL)
                 .disableCachingNullValues()
                 .serializeValuesWith(RedisSerializationContext.SerializationPair
-                        .fromSerializer(new GenericJackson2JsonRedisSerializer()));  // This handles any object, like ResponseEntity
+                        .fromSerializer(new GenericJackson2JsonRedisSerializer()));  // This handles any object
+
+        // config for audioUrl caching
+        RedisCacheConfiguration audioUrlTtlConfig = RedisCacheConfiguration.defaultCacheConfig()
+                .entryTtl(AUDIO_URL_CACHE_TTL)
+                .disableCachingNullValues()
+                .serializeValuesWith(RedisSerializationContext.SerializationPair
+                        .fromSerializer(new StringRedisSerializer()));
+
+        // assign keys to custom config settings
+        Map<String, RedisCacheConfiguration> cacheConfigurations = new HashMap<>();
+        cacheConfigurations.put(AUDIO_URL_CACHE, audioUrlTtlConfig);
 
         return RedisCacheManager
                 .builder(redisConnectionFactory)
                 .cacheDefaults(redisCacheConfiguration)
+                .withInitialCacheConfigurations(cacheConfigurations)
                 .build();
     }
 }

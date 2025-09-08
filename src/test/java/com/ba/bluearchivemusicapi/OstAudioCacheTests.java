@@ -1,8 +1,6 @@
 package com.ba.bluearchivemusicapi;
 
 import com.ba.bluearchivemusicapi.common.constant.CacheConstants;
-import com.ba.bluearchivemusicapi.repositories.OstRepository;
-import com.ba.bluearchivemusicapi.repositories.OstTypeRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -55,10 +53,6 @@ public class OstAudioCacheTests {
     @ServiceConnection
     static GenericContainer redis = new GenericContainer(DockerImageName.parse("redis:7.4.2"))
             .withExposedPorts(6379);
-    @Autowired
-    private OstRepository ostRepository;
-    @Autowired
-    private OstTypeRepository ostTypeRepository;
 
     @Test
     void testUserAudioUrlCache() throws Exception {

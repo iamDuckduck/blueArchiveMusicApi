@@ -1,11 +1,13 @@
 package com.ba.bluearchivemusicapi.controller.admin;
 
+import com.ba.bluearchivemusicapi.common.constant.CacheConstants;
 import com.ba.bluearchivemusicapi.dtos.OstDTO;
 import com.ba.bluearchivemusicapi.dtos.OstEditDTO;
 import com.ba.bluearchivemusicapi.dtos.OstUploadDTO;
 import com.ba.bluearchivemusicapi.service.OstService;
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -32,6 +34,7 @@ public class OstController {
 //    }
 
     @PutMapping("/edit/{id}")
+    @CacheEvict(value = CacheConstants.AUDIO_URL_CACHE, key = "#id")
     public ResponseEntity<OstDTO> edit(@PathVariable Long id, @Valid @ModelAttribute OstEditDTO ostEditDTO ) {
         OstDTO ostDTO = ostService.edit(id, ostEditDTO);
         return ResponseEntity.ok(ostDTO);

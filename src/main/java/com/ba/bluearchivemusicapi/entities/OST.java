@@ -30,6 +30,9 @@ public class OST {
     @Column(name = "audio_path")
     private String audio_path;
 
+    @Column(name = "play_count")
+    private Integer playCount;
+
     @ManyToOne
     @JoinColumn(name = "ost_type_id")
     private OstType ostType;

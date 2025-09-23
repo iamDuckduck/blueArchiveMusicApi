@@ -19,12 +19,13 @@ import com.ba.bluearchivemusicapi.repositories.OstTypeRepository;
 import com.ba.bluearchivemusicapi.specifications.OstSpecifications;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -33,12 +34,11 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import java.io.IOException;
-import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
-import static com.ba.bluearchivemusicapi.common.constant.CacheConstants.AUDIO_URL_CACHE;
+import static com.ba.bluearchivemusicapi.common.constant.CacheConstants.*;
 import static com.ba.bluearchivemusicapi.common.constant.CloudflareConstant.OST_AUDIO_EXPIRATION;
 import static com.ba.bluearchivemusicapi.common.constant.CloudflareConstant.OST_IMAGE_EXPIRATION;
 
@@ -58,6 +58,10 @@ public class OstService {
 
     @Value("${cloudflare.r2.bucket}")
     private String bucket;
+
+    private final RedisTemplate<String, Long> longRedisTemplate;
+
+    private final StringRedisTemplate stringRedisTemplate;
 
     @Transactional
     public void upload(OstUploadDTO ostUploadDTO) {
@@ -98,14 +102,32 @@ public class OstService {
         return cloudflareUtil.generatePresignedDownloadUrl(bucket, key, OST_IMAGE_EXPIRATION);
     }
 
-    @Cacheable(value = AUDIO_URL_CACHE, key = "#id")
     public String getAudioById(Long id) {
-        OST ost = ostRepository.findById(id)
-                .orElseThrow(() -> new OstNotFoundException(MessageConstant.OST_NOT_FOUND));
+        // increment playCount cache first
+        String playCountCacheKey = PLAYCOUNT_CACHE + "::" + id;
+        longRedisTemplate.opsForValue().increment(playCountCacheKey, 1);
 
-        String key = ost.getAudio_path();
+        // get audioUrl cache value
+        String cacheKey = AUDIO_URL_CACHE + "::" + id;
+        String audioUrlCache = stringRedisTemplate.opsForValue().get(cacheKey);
 
-        return cloudflareUtil.generatePresignedDownloadUrl(bucket, key, OST_AUDIO_EXPIRATION);
+        // if audioUrl cache value exists, return cached value
+        if (audioUrlCache != null) {
+            return audioUrlCache;
+        } else {
+            OST ost = ostRepository.findById(id)
+                    .orElseThrow(() -> new OstNotFoundException(MessageConstant.OST_NOT_FOUND));
+
+            // get audioUrl
+            String key = ost.getAudio_path();
+            String audioUrl = cloudflareUtil.generatePresignedDownloadUrl(bucket, key, OST_AUDIO_EXPIRATION);
+
+            stringRedisTemplate.opsForValue().set(cacheKey, audioUrl, AUDIO_URL_CACHE_TTL);
+
+            return audioUrl;
+        }
+
+
     }
 
     public Page<OstPageDTO> pageQuery(Integer page, Integer size, String sortField, String sortDirection, String filterField, String filterValue) {
@@ -114,7 +136,7 @@ public class OstService {
         // map fields to corresponding entity field (e.g. ostType.name)
         sortField = mapToEntityField(sortField);
         // sortField must not be null
-        if(sortField == null) {
+        if (sortField == null) {
             sortField = SortConstant.DEFAULT_SORT_FIELD;
         }
 

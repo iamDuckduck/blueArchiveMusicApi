@@ -20,11 +20,11 @@ import static com.ba.bluearchivemusicapi.common.constant.CacheConstants.*;
 public class RedisConfig {
 
     @Bean
-    public RedisTemplate<String, Integer> redisTemplate(RedisConnectionFactory connectionFactory) {
-        RedisTemplate<String, Integer> template = new RedisTemplate<>();
+    public RedisTemplate<String, Long> redisTemplate(RedisConnectionFactory connectionFactory) {
+        RedisTemplate<String, Long> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
         template.setKeySerializer(new StringRedisSerializer());
-        template.setValueSerializer(new GenericToStringSerializer<>(Integer.class));
+        template.setValueSerializer(new GenericToStringSerializer<>(Long.class));
         return template;
     }
 
@@ -48,7 +48,7 @@ public class RedisConfig {
         RedisCacheConfiguration playCountConfig = RedisCacheConfiguration.defaultCacheConfig()
                 .disableCachingNullValues()
                 .serializeValuesWith(RedisSerializationContext.SerializationPair
-                        .fromSerializer(new GenericToStringSerializer<>(Integer.class)));
+                        .fromSerializer(new GenericToStringSerializer<>(Long.class)));
 
         // assign keys to custom config settings
         Map<String, RedisCacheConfiguration> cacheConfigurations = new HashMap<>();

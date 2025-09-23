@@ -5,11 +5,12 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
+import org.springframework.data.redis.serializer.GenericToStringSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
-import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -17,6 +18,16 @@ import static com.ba.bluearchivemusicapi.common.constant.CacheConstants.*;
 
 @Configuration
 public class RedisConfig {
+
+    @Bean
+    public RedisTemplate<String, Long> redisTemplate(RedisConnectionFactory connectionFactory) {
+        RedisTemplate<String, Long> template = new RedisTemplate<>();
+        template.setConnectionFactory(connectionFactory);
+        template.setKeySerializer(new StringRedisSerializer());
+        template.setValueSerializer(new GenericToStringSerializer<>(Long.class));
+        return template;
+    }
+
     @Bean
     public RedisCacheManager cacheManager(RedisConnectionFactory redisConnectionFactory) {
         // default setting
@@ -33,9 +44,16 @@ public class RedisConfig {
                 .serializeValuesWith(RedisSerializationContext.SerializationPair
                         .fromSerializer(new StringRedisSerializer()));
 
+        // config for playCount caching
+        RedisCacheConfiguration playCountConfig = RedisCacheConfiguration.defaultCacheConfig()
+                .disableCachingNullValues()
+                .serializeValuesWith(RedisSerializationContext.SerializationPair
+                        .fromSerializer(new GenericToStringSerializer<>(Long.class)));
+
         // assign keys to custom config settings
         Map<String, RedisCacheConfiguration> cacheConfigurations = new HashMap<>();
         cacheConfigurations.put(AUDIO_URL_CACHE, audioUrlTtlConfig);
+        cacheConfigurations.put(PLAYCOUNT_CACHE, playCountConfig);
 
         return RedisCacheManager
                 .builder(redisConnectionFactory)

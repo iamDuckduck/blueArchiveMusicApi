@@ -59,7 +59,7 @@ public class OstService {
     @Value("${cloudflare.r2.bucket}")
     private String bucket;
 
-    private final RedisTemplate<String, Long> longRedisTemplate;
+    private final RedisTemplate<String, Integer> integerRedisTemplate;
 
     private final StringRedisTemplate stringRedisTemplate;
 
@@ -105,7 +105,7 @@ public class OstService {
     public String getAudioById(Long id) {
         // increment playCount cache first
         String playCountCacheKey = PLAYCOUNT_CACHE + "::" + id;
-        longRedisTemplate.opsForValue().increment(playCountCacheKey, 1);
+        integerRedisTemplate.opsForValue().increment(playCountCacheKey, 1);
 
         // get audioUrl cache value
         String cacheKey = AUDIO_URL_CACHE + "::" + id;

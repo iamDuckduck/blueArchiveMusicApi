@@ -38,7 +38,7 @@ public class OstPlayCountCacheTests {
 
     // Inject redisTemplate to check ttl
     @Autowired
-    private RedisTemplate<String, Long> redisTemplate;
+    private RedisTemplate<String, Integer> redisTemplate;
 
     // Set up Redis container
     @Container
@@ -69,10 +69,10 @@ public class OstPlayCountCacheTests {
 
         // Step 3: Check Cache
         // Check Redis value and type
-        Long value = redisTemplate.opsForValue().get(cacheKey);
+        Integer value = redisTemplate.opsForValue().get(cacheKey);
         assertNotNull(value);
 
         // Step 4: Check Cache's value
-        assertEquals(1L, value);
+        assertEquals(1, value);
     }
 }

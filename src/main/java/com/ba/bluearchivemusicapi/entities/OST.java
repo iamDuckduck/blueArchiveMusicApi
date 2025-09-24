@@ -33,7 +33,7 @@ public class OST {
     @Column(name = "play_count")
     private Integer playCount;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "ost_type_id")
     private OstType ostType;
 }

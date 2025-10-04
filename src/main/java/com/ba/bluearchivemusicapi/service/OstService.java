@@ -164,6 +164,7 @@ public class OstService {
         Map<String, String> fieldMapping = new HashMap<>();
         fieldMapping.put("author", "author");
         fieldMapping.put("name", "name");
+        fieldMapping.put("playCount", "playCount");
         fieldMapping.put("volumeName", "ostType.name");
         fieldMapping.put("volume", "ostType.volume");
         fieldMapping.put("ostNumber", "ostNumber");

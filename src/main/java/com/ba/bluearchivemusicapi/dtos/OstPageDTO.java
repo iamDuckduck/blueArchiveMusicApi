@@ -21,6 +21,8 @@ public class OstPageDTO {
     private String VolumeName;
 
     private int volume;
+
+    private Integer playCount;
 }
 
 

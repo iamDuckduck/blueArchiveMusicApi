@@ -6,7 +6,7 @@ import lombok.Data;
 public class OstPageDTO {
     private Long id;
 
-    private int ostNumber;
+    private Integer  ostNumber;
 
     private String name;
 
@@ -20,7 +20,7 @@ public class OstPageDTO {
 
     private String VolumeName;
 
-    private int volume;
+    private Integer  volume;
 
     private Integer playCount;
 }

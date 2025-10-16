@@ -39,8 +39,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static com.ba.bluearchivemusicapi.common.constant.CacheConstants.*;
-import static com.ba.bluearchivemusicapi.common.constant.CloudflareConstant.OST_AUDIO_EXPIRATION;
-import static com.ba.bluearchivemusicapi.common.constant.CloudflareConstant.OST_IMAGE_EXPIRATION;
+import static com.ba.bluearchivemusicapi.common.constant.CloudflareConstant.*;
 
 
 @Service
@@ -97,9 +96,9 @@ public class OstService {
         OST ost = ostRepository.findById(id)
                 .orElseThrow(() -> new OstNotFoundException(MessageConstant.OST_NOT_FOUND));
 
-        String key = ost.getImage_path();
+        String publicUrlSuffix = ost.getImage_path();
 
-        return cloudflareUtil.generatePresignedDownloadUrl(bucket, key, OST_IMAGE_EXPIRATION);
+        return PUBLIC_URL_PREFIX + publicUrlSuffix;
     }
 
     public String getAudioById(Long id) {

@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 public class OstController {
     private final OstService ostService;
 
+    @CrossOrigin
     @GetMapping("/image/{id}")
     public ResponseEntity<String> getImage(@PathVariable Long id) {
         String image_url = ostService.getImageById(id);

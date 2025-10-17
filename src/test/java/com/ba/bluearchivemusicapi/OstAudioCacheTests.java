@@ -2,6 +2,7 @@ package com.ba.bluearchivemusicapi;
 
 import com.ba.bluearchivemusicapi.common.constant.CacheConstants;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -31,6 +32,7 @@ import java.util.concurrent.TimeUnit;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Testcontainers
 @AutoConfigureMockMvc
+@Slf4j
 public class OstAudioCacheTests {
 
     // Inject MockMvc to simulate HTTP requests
@@ -76,14 +78,13 @@ public class OstAudioCacheTests {
         // Step 4: Check Cache's value
         assertEquals(responseBody, cache.get(ostId, String.class));
 
-        // Step 5: Get and verify TTL (should around 40 mins)
+        // Step 5: Get and verify TTL (should be -1)
         String cacheKey = CacheConstants.AUDIO_URL_CACHE + "::" + ostId;
         Long ttl = redisTemplate.getExpire(cacheKey, TimeUnit.SECONDS);
         assertNotNull(ttl, "TTL should exist for cache key");
 
         long expectedTtlSeconds = CacheConstants.AUDIO_URL_CACHE_TTL.getSeconds();
-        assertTrue(ttl >= expectedTtlSeconds - 5 && ttl <= expectedTtlSeconds + 5,
-                "TTL should be approximately " + expectedTtlSeconds + " seconds, but was " + ttl);
+        assertEquals(-1, (long) ttl, "TTL should be " + expectedTtlSeconds + " seconds, but was " + ttl);
     }
 
     // with @Transactional, it rolls back the changes in the db

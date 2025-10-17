@@ -118,8 +118,8 @@ public class OstService {
                     .orElseThrow(() -> new OstNotFoundException(MessageConstant.OST_NOT_FOUND));
 
             // get audioUrl
-            String key = ost.getAudio_path();
-            String audioUrl = cloudflareUtil.generatePresignedDownloadUrl(bucket, key, OST_AUDIO_EXPIRATION);
+            String audioPath = ost.getAudio_path();
+            String audioUrl = PUBLIC_URL_PREFIX + audioPath;
 
             stringRedisTemplate.opsForValue().set(cacheKey, audioUrl, AUDIO_URL_CACHE_TTL);
 

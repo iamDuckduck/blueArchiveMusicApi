@@ -111,22 +111,18 @@ public class OstService {
         String audioUrlCache = stringRedisTemplate.opsForValue().get(cacheKey);
 
         // if audioUrl cache value exists, return cached value
-        if (audioUrlCache != null) {
-            return audioUrlCache;
-        } else {
-            OST ost = ostRepository.findById(id)
-                    .orElseThrow(() -> new OstNotFoundException(MessageConstant.OST_NOT_FOUND));
+        return Optional.ofNullable(audioUrlCache)
+                .orElseGet(() -> {
+                    OST ost = ostRepository.findById(id)
+                            .orElseThrow(() -> new OstNotFoundException(MessageConstant.OST_NOT_FOUND));
 
-            // get audioUrl
-            String audioPath = ost.getAudio_path();
-            String audioUrl = PUBLIC_URL_PREFIX + audioPath;
+                    String audioPath = ost.getAudio_path();
+                    String audioUrl = PUBLIC_URL_PREFIX + audioPath;
 
-            stringRedisTemplate.opsForValue().set(cacheKey, audioUrl, AUDIO_URL_CACHE_TTL);
+                    stringRedisTemplate.opsForValue().set(cacheKey, audioUrl, AUDIO_URL_CACHE_TTL);
 
-            return audioUrl;
-        }
-
-
+                    return audioUrl;
+                });
     }
 
     public Page<OstPageDTO> pageQuery(Integer page, Integer size, String sortField, String sortDirection, String filterField, String filterValue) {

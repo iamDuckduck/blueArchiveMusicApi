@@ -119,7 +119,7 @@ public class OstService {
                     String audioPath = ost.getAudio_path();
                     String audioUrl = PUBLIC_URL_PREFIX + audioPath;
 
-                    stringRedisTemplate.opsForValue().set(cacheKey, audioUrl, AUDIO_URL_CACHE_TTL);
+                    stringRedisTemplate.opsForValue().set(cacheKey, audioUrl);
 
                     return audioUrl;
                 });

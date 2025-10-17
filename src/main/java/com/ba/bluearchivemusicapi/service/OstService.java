@@ -96,9 +96,9 @@ public class OstService {
         OST ost = ostRepository.findById(id)
                 .orElseThrow(() -> new OstNotFoundException(MessageConstant.OST_NOT_FOUND));
 
-        String publicUrlSuffix = ost.getImage_path();
+        String imagePath = ost.getImage_path();
 
-        return PUBLIC_URL_PREFIX + publicUrlSuffix;
+        return PUBLIC_URL_PREFIX + imagePath;
     }
 
     public String getAudioById(Long id) {

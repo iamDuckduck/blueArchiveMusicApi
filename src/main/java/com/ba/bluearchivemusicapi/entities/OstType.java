@@ -24,6 +24,8 @@ public class OstType {
     @Column(name = "name")
     private String name;
 
+    @Column(name = "image_path")
+    private String image_path;
 
     @OneToMany(mappedBy = "ostType")
     @Builder.Default

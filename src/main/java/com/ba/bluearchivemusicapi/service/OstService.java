@@ -39,8 +39,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static com.ba.bluearchivemusicapi.common.constant.CacheConstants.*;
-import static com.ba.bluearchivemusicapi.common.constant.CloudflareConstant.OST_AUDIO_EXPIRATION;
-import static com.ba.bluearchivemusicapi.common.constant.CloudflareConstant.OST_IMAGE_EXPIRATION;
+import static com.ba.bluearchivemusicapi.common.constant.CloudflareConstant.*;
 
 
 @Service
@@ -97,9 +96,9 @@ public class OstService {
         OST ost = ostRepository.findById(id)
                 .orElseThrow(() -> new OstNotFoundException(MessageConstant.OST_NOT_FOUND));
 
-        String key = ost.getImage_path();
+        String imagePath = ost.getImage_path();
 
-        return cloudflareUtil.generatePresignedDownloadUrl(bucket, key, OST_IMAGE_EXPIRATION);
+        return PUBLIC_URL_PREFIX + imagePath;
     }
 
     public String getAudioById(Long id) {
@@ -112,22 +111,18 @@ public class OstService {
         String audioUrlCache = stringRedisTemplate.opsForValue().get(cacheKey);
 
         // if audioUrl cache value exists, return cached value
-        if (audioUrlCache != null) {
-            return audioUrlCache;
-        } else {
-            OST ost = ostRepository.findById(id)
-                    .orElseThrow(() -> new OstNotFoundException(MessageConstant.OST_NOT_FOUND));
+        return Optional.ofNullable(audioUrlCache)
+                .orElseGet(() -> {
+                    OST ost = ostRepository.findById(id)
+                            .orElseThrow(() -> new OstNotFoundException(MessageConstant.OST_NOT_FOUND));
 
-            // get audioUrl
-            String key = ost.getAudio_path();
-            String audioUrl = cloudflareUtil.generatePresignedDownloadUrl(bucket, key, OST_AUDIO_EXPIRATION);
+                    String audioPath = ost.getAudio_path();
+                    String audioUrl = PUBLIC_URL_PREFIX + audioPath;
 
-            stringRedisTemplate.opsForValue().set(cacheKey, audioUrl, AUDIO_URL_CACHE_TTL);
+                    stringRedisTemplate.opsForValue().set(cacheKey, audioUrl);
 
-            return audioUrl;
-        }
-
-
+                    return audioUrl;
+                });
     }
 
     public Page<OstPageDTO> pageQuery(Integer page, Integer size, String sortField, String sortDirection, String filterField, String filterValue) {

@@ -39,7 +39,6 @@ public class RedisConfig {
 
         // config for audioUrl caching
         RedisCacheConfiguration audioUrlTtlConfig = RedisCacheConfiguration.defaultCacheConfig()
-                .entryTtl(AUDIO_URL_CACHE_TTL)
                 .disableCachingNullValues()
                 .serializeValuesWith(RedisSerializationContext.SerializationPair
                         .fromSerializer(new StringRedisSerializer()));

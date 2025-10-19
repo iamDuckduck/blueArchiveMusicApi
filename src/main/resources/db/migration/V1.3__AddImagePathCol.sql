@@ -1,0 +1,2 @@
+ALTER TABLE ost_type
+    ADD COLUMN image_path VARCHAR(255) NOT NULL DEFAULT '';

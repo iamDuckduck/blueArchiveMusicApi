@@ -29,6 +29,6 @@ public class OstType {
 
     @OneToMany(mappedBy = "ostType")
     @Builder.Default
-    private List<OST> addresses = new ArrayList<>();
+    private List<OST> ostList = new ArrayList<>();
 
 }

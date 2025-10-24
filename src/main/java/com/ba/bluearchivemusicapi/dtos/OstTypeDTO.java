@@ -9,5 +9,4 @@ public class OstTypeDTO {
     private String name;
     private int volume;
     private String image_path;
-
 }

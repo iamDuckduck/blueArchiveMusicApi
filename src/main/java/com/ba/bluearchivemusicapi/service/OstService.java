@@ -7,17 +7,16 @@ import com.ba.bluearchivemusicapi.common.exception.OstNotFoundException;
 import com.ba.bluearchivemusicapi.common.exception.OstTypeNotFoundException;
 import com.ba.bluearchivemusicapi.common.exception.PathNotMatchException;
 import com.ba.bluearchivemusicapi.common.utils.CloudflareUtil;
-import com.ba.bluearchivemusicapi.dtos.OstDTO;
-import com.ba.bluearchivemusicapi.dtos.OstEditDTO;
-import com.ba.bluearchivemusicapi.dtos.OstUploadDTO;
-import com.ba.bluearchivemusicapi.dtos.OstPageDTO;
+import com.ba.bluearchivemusicapi.dtos.*;
 import com.ba.bluearchivemusicapi.entities.OST;
 import com.ba.bluearchivemusicapi.entities.OstType;
 import com.ba.bluearchivemusicapi.mappers.OstMapper;
+import com.ba.bluearchivemusicapi.mappers.OstTypeMapper;
 import com.ba.bluearchivemusicapi.repositories.OstRepository;
 import com.ba.bluearchivemusicapi.repositories.OstTypeRepository;
 import com.ba.bluearchivemusicapi.specifications.OstSpecifications;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -33,8 +32,10 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
+import javax.swing.text.html.Option;
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -44,6 +45,7 @@ import static com.ba.bluearchivemusicapi.common.constant.CloudflareConstant.*;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class OstService {
     private final OstTypeRepository ostTypeRepository;
 
@@ -54,6 +56,7 @@ public class OstService {
     private final CloudflareUtil cloudflareUtil;
 
     private final S3Client s3Client;
+    private final OstTypeMapper ostTypeMapper;
 
     @Value("${cloudflare.r2.bucket}")
     private String bucket;
@@ -224,5 +227,12 @@ public class OstService {
 
         // get keys (location of the file)
         return req.key();
+    }
+
+    public List<OstDTO> queryByVolume(Integer volumeNumber) {
+        OstType ostType = ostTypeRepository.findByVolume(volumeNumber);
+        Optional.ofNullable(ostType).orElseThrow(() -> new OstTypeNotFoundException(MessageConstant.OST_TYPE_NOT_FOUND));
+        Optional.ofNullable(ostType.getOstList()).orElseThrow(() -> new OstTypeNotFoundException(MessageConstant.OST_NOT_FOUND));
+        return ostMapper.toDTOs(ostType.getOstList());
     }
 }

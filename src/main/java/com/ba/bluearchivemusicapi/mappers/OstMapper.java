@@ -8,11 +8,15 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.MappingTarget;
 
+import java.util.List;
+
 @Mapper(componentModel = "spring")
 public interface OstMapper {
 
     @Mapping(source = "id", target = "id")
     OstDTO toDTO(OST ost);
+
+    List<OstDTO> toDTOs(List<OST> ostList);
 
     @Mapping(source = "ostType.id", target = "ostTypeId")
     @Mapping(source = "ostType.name", target = "volumeName")

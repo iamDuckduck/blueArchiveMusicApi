@@ -2,12 +2,15 @@ package com.ba.bluearchivemusicapi.controller.user;
 
 
 import com.ba.bluearchivemusicapi.common.constant.SortConstant;
+import com.ba.bluearchivemusicapi.dtos.OstDTO;
 import com.ba.bluearchivemusicapi.dtos.OstPageDTO;
 import com.ba.bluearchivemusicapi.service.OstService;
 import lombok.AllArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController("userOstController")
 @RequestMapping("/user/ost")
@@ -41,6 +44,13 @@ public class OstController {
 
         Page<OstPageDTO> ostDTOPage = ostService.pageQuery(page, size, sortField, sortDirection, filterField, filterValue);
         return ResponseEntity.ok(ostDTOPage);
+    }
+
+    @CrossOrigin
+    @GetMapping("/volume/{volumeNumber}")
+    public ResponseEntity<List<OstDTO>> getOstsByVolume(@PathVariable Integer volumeNumber) {
+        List<OstDTO> ostList = ostService.queryByVolume(volumeNumber);
+        return ResponseEntity.ok(ostList);
     }
 }
 

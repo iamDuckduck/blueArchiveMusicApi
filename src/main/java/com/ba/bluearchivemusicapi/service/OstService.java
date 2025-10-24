@@ -32,7 +32,6 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
-import javax.swing.text.html.Option;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
@@ -229,7 +228,7 @@ public class OstService {
         return req.key();
     }
 
-    public List<OstDTO> queryByVolume(Integer volumeNumber) {
+    public List<OstDTO> listQuery(Integer volumeNumber) {
         OstType ostType = ostTypeRepository.findByVolume(volumeNumber);
         Optional.ofNullable(ostType).orElseThrow(() -> new OstTypeNotFoundException(MessageConstant.OST_TYPE_NOT_FOUND));
         Optional.ofNullable(ostType.getOstList()).orElseThrow(() -> new OstTypeNotFoundException(MessageConstant.OST_NOT_FOUND));

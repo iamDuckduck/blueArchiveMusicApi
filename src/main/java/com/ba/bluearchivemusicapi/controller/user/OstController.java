@@ -33,9 +33,9 @@ public class OstController {
     }
 
     @CrossOrigin
-    @GetMapping()
+    @GetMapping("/page")
     // TODO add default value?
-    public ResponseEntity<Page<OstPageDTO>> getOst(@RequestParam Integer page,
+    public ResponseEntity<Page<OstPageDTO>> getOstPage(@RequestParam Integer page,
                                                    @RequestParam Integer size,
                                                    @RequestParam(defaultValue = SortConstant.DEFAULT_SORT_FIELD) String sortField,
                                                    @RequestParam(defaultValue = SortConstant.SORT_DIRECTION_ASC) String sortDirection,
@@ -47,9 +47,9 @@ public class OstController {
     }
 
     @CrossOrigin
-    @GetMapping("/volume/{volumeNumber}")
-    public ResponseEntity<List<OstDTO>> getOstsByVolume(@PathVariable Integer volumeNumber) {
-        List<OstDTO> ostList = ostService.queryByVolume(volumeNumber);
+    @GetMapping("/list")
+    public ResponseEntity<List<OstDTO>> getOstList(@RequestParam Integer volume) {
+        List<OstDTO> ostList = ostService.listQuery(volume);
         return ResponseEntity.ok(ostList);
     }
 }

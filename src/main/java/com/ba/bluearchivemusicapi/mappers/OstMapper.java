@@ -2,6 +2,7 @@ package com.ba.bluearchivemusicapi.mappers;
 
 import com.ba.bluearchivemusicapi.dtos.OstDTO;
 import com.ba.bluearchivemusicapi.dtos.OstEditDTO;
+import com.ba.bluearchivemusicapi.dtos.OstListDTO;
 import com.ba.bluearchivemusicapi.dtos.OstPageDTO;
 import com.ba.bluearchivemusicapi.entities.OST;
 import org.mapstruct.Mapper;
@@ -16,7 +17,7 @@ public interface OstMapper {
     @Mapping(source = "id", target = "id")
     OstDTO toDTO(OST ost);
 
-    List<OstDTO> toDTOs(List<OST> ostList);
+    List<OstListDTO> toDTOs(List<OST> ostList);
 
     @Mapping(source = "ostType.id", target = "ostTypeId")
     @Mapping(source = "ostType.name", target = "volumeName")

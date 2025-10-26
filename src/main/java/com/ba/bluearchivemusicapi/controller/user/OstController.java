@@ -2,7 +2,7 @@ package com.ba.bluearchivemusicapi.controller.user;
 
 
 import com.ba.bluearchivemusicapi.common.constant.SortConstant;
-import com.ba.bluearchivemusicapi.dtos.OstDTO;
+import com.ba.bluearchivemusicapi.dtos.OstListDTO;
 import com.ba.bluearchivemusicapi.dtos.OstPageDTO;
 import com.ba.bluearchivemusicapi.service.OstService;
 import lombok.AllArgsConstructor;
@@ -48,8 +48,8 @@ public class OstController {
 
     @CrossOrigin
     @GetMapping("/list")
-    public ResponseEntity<List<OstDTO>> getOstList(@RequestParam Integer volume) {
-        List<OstDTO> ostList = ostService.listQuery(volume);
+    public ResponseEntity<List<OstListDTO>> getOstList(@RequestParam Integer volume) {
+        List<OstListDTO> ostList = ostService.listQuery(volume);
         return ResponseEntity.ok(ostList);
     }
 }

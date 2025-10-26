@@ -228,7 +228,7 @@ public class OstService {
         return req.key();
     }
 
-    public List<OstDTO> listQuery(Integer volumeNumber) {
+    public List<OstListDTO> listQuery(Integer volumeNumber) {
         OstType ostType = ostTypeRepository.findByVolume(volumeNumber);
         Optional.ofNullable(ostType).orElseThrow(() -> new OstTypeNotFoundException(MessageConstant.OST_TYPE_NOT_FOUND));
         Optional.ofNullable(ostType.getOstList()).orElseThrow(() -> new OstTypeNotFoundException(MessageConstant.OST_NOT_FOUND));

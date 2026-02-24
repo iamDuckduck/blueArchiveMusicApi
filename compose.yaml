@@ -3,3 +3,17 @@ services:
     image: redis:8.2.0
     ports:
       - "6379:6379"
+  postgres:
+    image: postgres:16-alpine
+    container_name: ba-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+volumes:
+  postgres-data:

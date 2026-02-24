@@ -34,3 +34,4 @@ build/
 
 ### yaml with sensitive info ###
 src/main/resources/application-*.yaml
+.env

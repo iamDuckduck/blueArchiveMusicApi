@@ -2,6 +2,9 @@ package com.ba.bluearchivemusicapi.entities;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -13,6 +16,7 @@ import java.util.List;
 @NoArgsConstructor
 @Entity
 @Builder
+@EntityListeners(AuditingEntityListener.class)
 @Table(name = "album")
 public class Album {
     @Id
@@ -31,9 +35,11 @@ public class Album {
     @Column(name = "description")
     private String description;
 
+    @CreatedDate
     @Column(name = "created_date")
     private LocalDate createdDate;
 
+    @LastModifiedDate
     @Column(name = "updated_date")
     private LocalDate updatedDate;
 

@@ -2,8 +2,11 @@ package com.ba.bluearchivemusicapi.entities;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -13,6 +16,7 @@ import java.util.List;
 @NoArgsConstructor
 @Entity
 @Builder
+@EntityListeners(AuditingEntityListener.class)
 @Table(name = "category")
 public class Category {
     @Id
@@ -22,11 +26,13 @@ public class Category {
     @Column(name = "category")
     private String category;
 
-    @Column(name = "created_date")
-    private LocalDate createdDate;
+    @CreatedDate
+    @Column(name = "created_date",nullable = false, updatable = false)
+    private LocalDateTime createdDate;
 
-    @Column(name = "updated_date")
-    private LocalDate updatedDate;
+    @LastModifiedDate
+    @Column(name = "updated_date",nullable = false)
+    private LocalDateTime updatedDate;
 
     @OneToMany(mappedBy = "category",
             cascade = CascadeType.ALL,

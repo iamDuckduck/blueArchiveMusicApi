@@ -1,5 +1,6 @@
 package com.ba.bluearchivemusicapi.handler;
 
+import com.ba.bluearchivemusicapi.common.exception.CategoryAlreadyExistsException;
 import com.ba.bluearchivemusicapi.common.exception.FileUploadException;
 import com.ba.bluearchivemusicapi.common.exception.OstNotFoundException;
 import com.ba.bluearchivemusicapi.common.exception.UnsupportedMediaTypeException;
@@ -37,4 +38,10 @@ public class GlobalExceptionHandler {
     public ResponseEntity<String> handleOstNotFoundException(OstNotFoundException e){
         return new ResponseEntity<>(e.getMessage(), HttpStatus.BAD_REQUEST);
     }
+
+    @ExceptionHandler(CategoryAlreadyExistsException.class)
+    public ResponseEntity<String> handleCategoryAlreadyExistsException(CategoryAlreadyExistsException e){
+        return new ResponseEntity<>(e.getMessage(), HttpStatus.CONFLICT);
+    }
+
 }

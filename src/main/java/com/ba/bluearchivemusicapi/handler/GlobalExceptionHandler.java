@@ -3,6 +3,7 @@ package com.ba.bluearchivemusicapi.handler;
 import com.ba.bluearchivemusicapi.common.exception.CategoryAlreadyExistsException;
 import com.ba.bluearchivemusicapi.common.exception.FileUploadException;
 import com.ba.bluearchivemusicapi.common.exception.OstNotFoundException;
+import com.ba.bluearchivemusicapi.common.exception.ResourceNotFoundException;
 import com.ba.bluearchivemusicapi.common.exception.UnsupportedMediaTypeException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -42,6 +43,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(CategoryAlreadyExistsException.class)
     public ResponseEntity<String> handleCategoryAlreadyExistsException(CategoryAlreadyExistsException e){
         return new ResponseEntity<>(e.getMessage(), HttpStatus.CONFLICT);
+    }
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<String> handleResourceNotFoundException(ResourceNotFoundException e){
+        return new ResponseEntity<>(e.getMessage(), HttpStatus.NOT_FOUND);
     }
 
 }

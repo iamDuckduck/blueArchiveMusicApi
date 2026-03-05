@@ -30,7 +30,7 @@ public class Album {
     private String coverImagePath;
 
     @Column(name = "release_date")
-    private String releaseDate;
+    private LocalDate releaseDate;
 
     @Column(name = "description")
     private String description;

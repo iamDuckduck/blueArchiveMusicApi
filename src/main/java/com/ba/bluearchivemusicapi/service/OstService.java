@@ -2,6 +2,7 @@ package com.ba.bluearchivemusicapi.service;
 
 import com.ba.bluearchivemusicapi.common.constant.MessageConstant;
 import com.ba.bluearchivemusicapi.common.constant.SortConstant;
+import com.ba.bluearchivemusicapi.common.constant.UploadResourceType;
 import com.ba.bluearchivemusicapi.common.exception.FileUploadException;
 import com.ba.bluearchivemusicapi.common.exception.OstNotFoundException;
 import com.ba.bluearchivemusicapi.common.exception.OstTypeNotFoundException;
@@ -214,7 +215,7 @@ public class OstService {
     // only support OST audio and image for now
     private String uploadFileToBucket(MultipartFile file) {
         // create Req object to the bucket
-        PutObjectRequest req = cloudflareUtil.createPutObjectReq(file);
+        PutObjectRequest req = cloudflareUtil.createPutObjectReq(file, UploadResourceType.SONG);
 
         // todo: handle one failed, one success situation
         // save image and audio in Cloudflare bucket

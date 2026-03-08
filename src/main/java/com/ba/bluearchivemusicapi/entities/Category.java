@@ -34,10 +34,7 @@ public class Category {
     @Column(name = "updated_date",nullable = false)
     private LocalDateTime updatedDate;
 
-    @OneToMany(mappedBy = "category",
-            cascade = CascadeType.ALL,
-            orphanRemoval = true,
-            fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "category")
     private List<Album> albumList = new ArrayList<>();
 
     // ──── Helper methods ────

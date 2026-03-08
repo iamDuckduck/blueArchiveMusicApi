@@ -50,7 +50,7 @@ public class Song {
     @Column(name = "updated_date")
     private LocalDate updatedDate;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne
     @JoinColumn(name = "album_id")
     private Album album;
 }

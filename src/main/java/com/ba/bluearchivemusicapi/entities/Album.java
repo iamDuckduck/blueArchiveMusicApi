@@ -43,14 +43,11 @@ public class Album {
     @Column(name = "updated_date")
     private LocalDate updatedDate;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne
     @JoinColumn(name = "category_id")
     private Category category;
 
-    @OneToMany(mappedBy = "album",
-            cascade = CascadeType.ALL,
-            orphanRemoval = true,
-            fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "album")
     private List<Song> songList = new ArrayList<>();
 
     // ──── Helper methods ────

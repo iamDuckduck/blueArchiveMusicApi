@@ -15,11 +15,9 @@ public class SongUploadDTO {
     @NotNull(message = "albumId is required")
     private Long albumId;
 
-    @NotBlank(message = "artist cannot be blank")
-    private String artist;
+    private Long artistId;
 
-    @NotBlank(message = "composer cannot be blank")
-    private String composer;
+    private Long composerId;
 
     private String description;
 

@@ -5,6 +5,8 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.List;
+
 @Data
 public class SongUploadDTO {
 
@@ -15,9 +17,9 @@ public class SongUploadDTO {
     @NotNull(message = "albumId is required")
     private Long albumId;
 
-    private Long artistId;
+    private List<Long> artistIds;
 
-    private Long composerId;
+    private List<Long> composerIds;
 
     private String description;
 

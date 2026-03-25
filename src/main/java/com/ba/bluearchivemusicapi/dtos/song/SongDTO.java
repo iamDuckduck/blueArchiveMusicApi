@@ -2,15 +2,17 @@ package com.ba.bluearchivemusicapi.dtos.song;
 
 import lombok.Data;
 
+import java.util.List;
+
 @Data
 public class SongDTO {
     private String title;
 
     private String albumTitle;
 
-    private String artist;
+    private List<String> artists;
 
-    private String composer;
+    private List<String> composers;
 
     private String audioPath;
 

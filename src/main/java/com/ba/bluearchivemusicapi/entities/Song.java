@@ -7,6 +7,9 @@ import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Setter
 @Getter
@@ -48,11 +51,32 @@ public class Song {
     @JoinColumn(name = "album_id")
     private Album album;
 
-    @ManyToOne
-    @JoinColumn(name = "artist_id")
-    private Artist artist;
+    @OneToMany(mappedBy = "song", cascade = CascadeType.PERSIST)
+    @Builder.Default
+    private List<SongArtist> songArtists = new ArrayList<>();
 
-    @ManyToOne
-    @JoinColumn(name = "composer_id")
-    private Artist composer;
+    // ──── Helper methods ────
+
+    public List<Artist> getArtists() {
+        return songArtists.stream()
+                .filter(sa -> sa.getType() == SongArtistType.ARTIST)
+                .map(SongArtist::getArtist)
+                .collect(Collectors.toList());
+    }
+
+    public List<Artist> getComposers() {
+        return songArtists.stream()
+                .filter(sa -> sa.getType() == SongArtistType.COMPOSER)
+                .map(SongArtist::getArtist)
+                .collect(Collectors.toList());
+    }
+
+    public void addArtist(Artist artist, SongArtistType type) {
+        SongArtist sa = SongArtist.builder()
+                .song(this)
+                .artist(artist)
+                .type(type)
+                .build();
+        songArtists.add(sa);
+    }
 }

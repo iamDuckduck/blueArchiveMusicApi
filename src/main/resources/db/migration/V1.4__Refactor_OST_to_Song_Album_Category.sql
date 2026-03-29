@@ -1,0 +1,41 @@
+-- Drop old tables
+DROP TABLE IF EXISTS OST;
+DROP TABLE IF EXISTS OST_type;
+
+-- Create category table
+CREATE TABLE category (
+    id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    category VARCHAR(255) NOT NULL UNIQUE,
+    created_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create album table
+CREATE TABLE album (
+    id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    title VARCHAR(255) NOT NULL,
+    cover_image_path VARCHAR(255) NOT NULL,
+    release_date VARCHAR(255),
+    description VARCHAR(255),
+    category_id INTEGER NOT NULL,
+    created_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (category_id) REFERENCES category(id) ON DELETE CASCADE
+);
+
+-- Create song table
+CREATE TABLE song (
+    id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    title VARCHAR(255) NOT NULL,
+    album_id INTEGER NOT NULL,
+    artist VARCHAR(255),
+    composer VARCHAR(255),
+    image_path VARCHAR(255) NOT NULL,
+    audio_path VARCHAR(255) NOT NULL,
+    description VARCHAR(255),
+    play_count INTEGER NOT NULL DEFAULT 0 CHECK (play_count >= 0),
+    created_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (album_id) REFERENCES album(id) ON DELETE CASCADE
+);
+

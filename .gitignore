@@ -34,3 +34,8 @@ build/
 
 ### yaml with sensitive info ###
 src/main/resources/application-*.yaml
+.env
+
+### Python scripting ###
+scripting
+*.pyc

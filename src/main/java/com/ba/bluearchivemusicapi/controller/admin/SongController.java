@@ -14,7 +14,7 @@ import org.springframework.web.multipart.MultipartFile;
         name = "Songs",
         description = "songs management"
 )
-@RestController
+@RestController("AdminSongController")
 @RequestMapping("/admin/song")
 @AllArgsConstructor
 public class SongController {

@@ -32,7 +32,7 @@ public class CategoryService {
 	}
 
 	public List<CategoryWithAlbumInfoDTO> getAllCategoriesWithAlbums() {
-		List<Category> categories = categoryRepository.findAll();
+		List<Category> categories = categoryRepository.findAllWithAlbums();
 		return categories.stream().map(categoryMapper::categoryToCategoryWithAlbumInfoDTO).toList();
 	}
 }

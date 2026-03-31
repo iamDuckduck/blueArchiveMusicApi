@@ -1,6 +1,5 @@
 package com.ba.bluearchivemusicapi.controller.user;
 
-import com.ba.bluearchivemusicapi.dtos.category.CategoryDTO;
 import com.ba.bluearchivemusicapi.dtos.category.CategoryWithAlbumInfoDTO;
 import com.ba.bluearchivemusicapi.service.CategoryService;
 import io.swagger.v3.oas.annotations.tags.Tag;

@@ -4,6 +4,7 @@ import com.ba.bluearchivemusicapi.common.constant.UploadResourceType;
 import com.ba.bluearchivemusicapi.common.exception.ResourceNotFoundException;
 import com.ba.bluearchivemusicapi.common.utils.CloudflareUtil;
 import com.ba.bluearchivemusicapi.dtos.album.AlbumDTO;
+import com.ba.bluearchivemusicapi.dtos.album.AlbumDetailsDTO;
 import com.ba.bluearchivemusicapi.dtos.album.AlbumUploadDTO;
 import com.ba.bluearchivemusicapi.entities.Album;
 import com.ba.bluearchivemusicapi.entities.Category;
@@ -13,6 +14,8 @@ import com.ba.bluearchivemusicapi.repositories.CategoryRepository;
 import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 @AllArgsConstructor
 @Service
@@ -46,5 +49,11 @@ public class AlbumService {
 
         albumRepository.save(album);
         return albumMapper.albumToAlbumDTO(album);
+    }
+
+    @Transactional(readOnly = true)
+    public List<AlbumDetailsDTO> getAllAlbumsWithDetails() {
+        List<Album> albums = albumRepository.findAllWithCategoryAndSongs();
+        return albums.stream().map(albumMapper::albumToAlbumDetailsDTO).toList();
     }
 }

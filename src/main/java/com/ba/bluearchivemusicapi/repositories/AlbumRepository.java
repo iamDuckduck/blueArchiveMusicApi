@@ -14,4 +14,10 @@ public interface AlbumRepository extends JpaRepository<Album,String> {
            "LEFT JOIN FETCH a.category " +
            "LEFT JOIN FETCH a.songList")
     List<Album> findAllWithCategoryAndSongs();
+
+    @Query("SELECT a FROM Album a " +
+           "LEFT JOIN FETCH a.category " +
+           "LEFT JOIN FETCH a.songList " +
+           "WHERE a.id = :albumId")
+    Album findAlbumWithSongListById(Long albumId);
 }

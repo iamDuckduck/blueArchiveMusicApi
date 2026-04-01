@@ -56,4 +56,9 @@ public class AlbumService {
         List<Album> albums = albumRepository.findAllWithCategoryAndSongs();
         return albums.stream().map(albumMapper::albumToAlbumDetailsDTO).toList();
     }
+
+    public AlbumDetailsDTO getAlbumDetailsById(Long albumId) {
+        Album album = albumRepository.findAlbumWithSongListById(albumId);
+        return albumMapper.albumToAlbumDetailsDTO(album);
+    }
 }

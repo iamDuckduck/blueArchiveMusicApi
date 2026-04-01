@@ -19,4 +19,10 @@ public class AlbumController {
         List<AlbumDetailsDTO> albums = albumService.getAllAlbumsWithDetails();
         return ResponseEntity.ok(albums);
     }
+
+    @GetMapping("/{albumId}/songs")
+    public ResponseEntity<AlbumDetailsDTO> getAlbumDetailsById(@PathVariable Long albumId) {
+        AlbumDetailsDTO albumDetails = albumService.getAlbumDetailsById(albumId);
+        return ResponseEntity.ok(albumDetails);
+    }
 }

@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.AllArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.CrossOrigin;
 import java.util.List;
 
 @Tag(name = "Category", description = "Category management")
@@ -17,6 +18,7 @@ public class CategoryController {
 	private final CategoryService categoryService;
 
 	@GetMapping("/details")
+	@CrossOrigin(origins = "http://localhost:5173")
 	public ResponseEntity<List<CategoryWithAlbumInfoDTO>> getAllCategoriesWithAlbums() {
 		List<CategoryWithAlbumInfoDTO> categories = categoryService.getAllCategoriesWithAlbums();
 		return ResponseEntity.ok(categories);

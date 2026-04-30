@@ -5,6 +5,8 @@ import java.time.LocalDate;
 
 @Data
 public class AlbumDTO {
+    private Long id;
+
     private String title;
 
     private String coverImagePath;

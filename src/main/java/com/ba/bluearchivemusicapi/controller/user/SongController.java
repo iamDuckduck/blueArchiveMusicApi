@@ -21,6 +21,7 @@ public class SongController {
     private final SongService songService;
 
     @GetMapping("/random")
+    @CrossOrigin(origins = "http://localhost:5173")
     public ResponseEntity<SongDTO> getRandomSong() {
         SongDTO randomSong = songService.getRandomSong();
         return ResponseEntity.ok(randomSong);

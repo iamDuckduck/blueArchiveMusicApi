@@ -14,6 +14,7 @@ import com.ba.bluearchivemusicapi.repositories.AlbumRepository;
 import com.ba.bluearchivemusicapi.repositories.ArtistRepository;
 import com.ba.bluearchivemusicapi.repositories.SongRepository;
 import lombok.AllArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -67,5 +68,15 @@ public class SongService {
                             type.name() + " not found with id: " + artistId));
             song.addArtist(artist, type);
         }
+    }
+
+    public SongDTO getRandomSong() {
+        List<Song> randomSong = songRepository.findRandomSong(PageRequest.of(0, 1));
+
+        if (randomSong.isEmpty()) {
+            throw new ResourceNotFoundException("No songs found");
+        }
+
+        return songMapper.songToSongDTO(randomSong.get(0));
     }
 }

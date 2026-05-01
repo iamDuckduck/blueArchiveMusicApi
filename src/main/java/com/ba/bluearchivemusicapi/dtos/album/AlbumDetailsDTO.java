@@ -1,10 +1,13 @@
 package com.ba.bluearchivemusicapi.dtos.album;
 
+import com.ba.bluearchivemusicapi.dtos.song.SongDTO;
 import lombok.Data;
+
 import java.time.LocalDate;
+import java.util.List;
 
 @Data
-public class AlbumDTO {
+public class AlbumDetailsDTO {
     private Long id;
 
     private String title;
@@ -15,7 +18,7 @@ public class AlbumDTO {
 
     private String description;
 
-    private String category;
+    private List<SongDTO> songList;
 
     private LocalDate createdDate;
 

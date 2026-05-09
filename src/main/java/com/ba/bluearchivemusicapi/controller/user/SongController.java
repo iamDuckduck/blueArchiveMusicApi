@@ -35,4 +35,11 @@ public class SongController {
         List<SongDTO> randomSongList = songService.getRandomSongList();
         return ResponseEntity.ok(randomSongList);
     }
+
+    @PostMapping("/{id}/play")
+    @CrossOrigin(origins = "http://localhost:5173")
+    public ResponseEntity<Void> incrementPlayCount(@PathVariable Long id) {
+        songService.incrementSongPlayCount(id);
+        return ResponseEntity.accepted().build();
+    }
 }

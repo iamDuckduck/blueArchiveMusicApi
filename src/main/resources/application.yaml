@@ -21,6 +21,11 @@ spring:
     jpa:
         show-sql: true
         database-platform: org.hibernate.dialect.PostgreSQLDialect
+        properties:
+            hibernate:
+                jdbc:
+                    batch_size: 100
+                order_updates: true
     flyway:
         baseline-on-migrate: true
         validate-on-migrate: true

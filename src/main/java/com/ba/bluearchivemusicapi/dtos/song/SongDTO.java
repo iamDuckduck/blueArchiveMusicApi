@@ -6,6 +6,8 @@ import java.util.List;
 
 @Data
 public class SongDTO {
+    private Long id;
+
     private String title;
 
     private String albumTitle;

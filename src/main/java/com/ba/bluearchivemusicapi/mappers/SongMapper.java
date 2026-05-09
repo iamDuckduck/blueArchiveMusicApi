@@ -21,6 +21,8 @@ public interface SongMapper {
     @Mapping(source = "songArtists", target = "composers", qualifiedByName = "toComposerNames")
     SongDTO songToSongDTO(Song song);
 
+    List<SongDTO> songsToSongDTOs(List<Song> songs);
+
     @Named("toArtistNames")
     default List<String> toArtistNames(List<SongArtist> songArtists) {
         if (songArtists == null) return Collections.emptyList();

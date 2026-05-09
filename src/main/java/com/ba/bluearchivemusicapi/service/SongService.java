@@ -79,4 +79,14 @@ public class SongService {
 
         return songMapper.songToSongDTO(randomSong.get(0));
     }
+
+    public List<SongDTO> getRandomSongList() {
+        List<Song> randomSongList = songRepository.findRandomSong(PageRequest.of(0, 10));
+
+        if (randomSongList.isEmpty()) {
+            throw new ResourceNotFoundException("No songs found");
+        }
+
+        return songMapper.songsToSongDTOs(randomSongList);
+    }
 }

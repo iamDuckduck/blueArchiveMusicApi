@@ -9,6 +9,8 @@ import com.ba.bluearchivemusicapi.service.SongService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.AllArgsConstructor;
 
+import java.util.List;
+
 @Tag(
         name = "Songs",
         description = "songs management"
@@ -25,5 +27,12 @@ public class SongController {
     public ResponseEntity<SongDTO> getRandomSong() {
         SongDTO randomSong = songService.getRandomSong();
         return ResponseEntity.ok(randomSong);
+    }
+
+    @GetMapping("/random/list")
+    @CrossOrigin(origins = "http://localhost:5173")
+    public ResponseEntity<List<SongDTO>> getListRandomSong() {
+        List<SongDTO> randomSongList = songService.getRandomSongList();
+        return ResponseEntity.ok(randomSongList);
     }
 }

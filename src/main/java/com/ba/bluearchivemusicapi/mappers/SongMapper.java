@@ -19,6 +19,7 @@ public interface SongMapper {
     @Mapping(source = "album.title", target = "albumTitle")
     @Mapping(source = "songArtists", target = "artists", qualifiedByName = "toArtistNames")
     @Mapping(source = "songArtists", target = "composers", qualifiedByName = "toComposerNames")
+    @Mapping(source = "id", target = "id")
     SongDTO songToSongDTO(Song song);
 
     List<SongDTO> songsToSongDTOs(List<Song> songs);

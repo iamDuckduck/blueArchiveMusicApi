@@ -18,7 +18,6 @@ public class CategoryController {
 	private final CategoryService categoryService;
 
 	@GetMapping("/details")
-	@CrossOrigin(origins = "http://localhost:5173")
 	public ResponseEntity<List<CategoryWithAlbumInfoDTO>> getAllCategoriesWithAlbums() {
 		List<CategoryWithAlbumInfoDTO> categories = categoryService.getAllCategoriesWithAlbums();
 		return ResponseEntity.ok(categories);

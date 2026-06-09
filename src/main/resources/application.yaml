@@ -1,3 +1,19 @@
+app:
+    cors:
+        allowed-origins:
+            - "http://localhost:5173"
+        allowed-methods:
+            - "GET"
+            - "POST"
+            - "PUT"
+            - "PATCH"
+            - "DELETE"
+            - "OPTIONS"
+        allowed-headers:
+            - "Authorization"
+            - "Content-Type"
+        allow-credentials: false
+             
 spring:
     application:
         name: blueArchiveMusicApi
@@ -36,4 +52,5 @@ cloudflare:
         accessKey: ${blueArchive.r2.accessKey}
         secretKey: ${blueArchive.r2.secretKey}
         bucket: ${blueArchive.r2.bucket}
+
 

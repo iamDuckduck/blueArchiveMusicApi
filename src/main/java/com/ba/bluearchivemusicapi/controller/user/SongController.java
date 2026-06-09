@@ -23,21 +23,18 @@ public class SongController {
     private final SongService songService;
 
     @GetMapping("/random")
-    @CrossOrigin(origins = "http://localhost:5173")
     public ResponseEntity<SongDTO> getRandomSong() {
         SongDTO randomSong = songService.getRandomSong();
         return ResponseEntity.ok(randomSong);
     }
 
     @GetMapping("/random/list")
-    @CrossOrigin(origins = "http://localhost:5173")
     public ResponseEntity<List<SongDTO>> getListRandomSong() {
         List<SongDTO> randomSongList = songService.getRandomSongList();
         return ResponseEntity.ok(randomSongList);
     }
 
     @PostMapping("/{id}/play")
-    @CrossOrigin(origins = "http://localhost:5173")
     public ResponseEntity<Void> incrementPlayCount(@PathVariable Long id) {
         songService.incrementSongPlayCount(id);
         return ResponseEntity.accepted().build();

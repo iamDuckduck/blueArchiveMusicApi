@@ -9,7 +9,6 @@ import java.util.List;
 
 @RestController("UserAlbumController")
 @RequestMapping("/user/albums")
-@CrossOrigin(origins = "http://localhost:5173")
 @AllArgsConstructor
 public class AlbumController {
 

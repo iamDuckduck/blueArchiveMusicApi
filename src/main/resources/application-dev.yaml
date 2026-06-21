@@ -1,0 +1,18 @@
+spring:
+  docker:
+    compose:
+      enabled: true
+
+blueArchive:
+  datasource:
+    url: ${POSTGRES_DATASOURCE_URL}
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+  r2:
+    endpoint: ${R2_ENDPOINT}
+    accessKey: ${R2_ACCESS_KEY}
+    secretKey: ${R2_SECRET_KEY}
+    bucket: ${R2_BUCKET}
+
+  redis:
+    url: ${REDIS_URL}

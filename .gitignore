@@ -32,9 +32,10 @@ build/
 ### VS Code ###
 .vscode/
 
-### yaml with sensitive info ###
-src/main/resources/application-*.yaml
-.env
+### sensitive info ###
+/.env
+/.env.*
+!/.env.example
 
 ### Python scripting ###
 scripting

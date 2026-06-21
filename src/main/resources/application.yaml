@@ -18,13 +18,17 @@ spring:
     application:
         name: blueArchiveMusicApi
     profiles:
-        active: dev
+        # If SPRING_PROFILES_ACTIVE exists, use it.
+        # Otherwise, default to dev.
+        active: ${SPRING_PROFILES_ACTIVE:dev}
+    docker:
+        compose:
+            enabled: false
     cache:
         type: redis
     data:
         redis:
-            host: ${blueArchive.redis.host}
-            port: ${blueArchive.redis.port}
+            url: ${blueArchive.redis.url}
     datasource:
         url: ${blueArchive.datasource.url}
         username: ${blueArchive.datasource.username}

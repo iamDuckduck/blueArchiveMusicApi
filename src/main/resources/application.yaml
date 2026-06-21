@@ -13,6 +13,9 @@ app:
             - "Authorization"
             - "Content-Type"
         allow-credentials: false
+
+server:
+    port: ${PORT:8080}
              
 spring:
     application:

@@ -10,4 +10,6 @@ public interface SongSearchProjection {
     String getAlbumTitle();
 
     String getImagePath();
+
+    String getAudioPath();
 }

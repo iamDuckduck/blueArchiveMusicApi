@@ -13,4 +13,6 @@ public class SongSearchResultDTO {
     private String albumTitle;
 
     private String imagePath;
+
+    private String audioPath;
 }

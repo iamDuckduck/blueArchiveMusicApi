@@ -18,6 +18,7 @@ public interface SongRepository extends JpaRepository<Song, Long> {
                 s.id,
                 s.title,
                 s.image_path AS "imagePath",
+                s.audio_path AS "audioPath",
                 a.id AS "albumId",
                 a.title AS "albumTitle"
             FROM song s

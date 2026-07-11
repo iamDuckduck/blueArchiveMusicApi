@@ -1,6 +1,7 @@
 package com.ba.bluearchivemusicapi.service;
 
 import com.ba.bluearchivemusicapi.common.exception.CategoryAlreadyExistsException;
+import com.ba.bluearchivemusicapi.common.utils.AlbumTitleVolumeOrder;
 import com.ba.bluearchivemusicapi.dtos.category.CategoryDTO;
 import com.ba.bluearchivemusicapi.dtos.category.CategoryUploadDTO;
 import com.ba.bluearchivemusicapi.dtos.category.CategoryWithAlbumInfoDTO;
@@ -33,6 +34,11 @@ public class CategoryService {
 
 	public List<CategoryWithAlbumInfoDTO> getAllCategoriesWithAlbums() {
 		List<Category> categories = categoryRepository.findAllWithAlbums();
-		return categories.stream().map(categoryMapper::categoryToCategoryWithAlbumInfoDTO).toList();
+		return categories.stream().map(category -> {
+			CategoryWithAlbumInfoDTO categoryDTO =
+					categoryMapper.categoryToCategoryWithAlbumInfoDTO(category);
+			AlbumTitleVolumeOrder.sort(categoryDTO.getAlbumList());
+			return categoryDTO;
+		}).toList();
 	}
 }

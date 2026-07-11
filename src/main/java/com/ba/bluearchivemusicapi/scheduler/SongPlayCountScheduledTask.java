@@ -32,7 +32,9 @@ public class SongPlayCountScheduledTask {
         this.redisTemplate = redisTemplate;
     }
 
-    @Scheduled(fixedRate = 10000)
+    // Keep demo infrastructure quiet: an hourly sync avoids constant Redis polling.
+    // On an idle-sleep host such as Render, a sleeping service runs no scheduler or Redis calls.
+    @Scheduled(fixedRate = 60 * 60 * 1000)
     @Transactional
     public void syncPlayCount() {
         log.info("syncSongPlayCount (ScheduledTask)");

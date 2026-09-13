@@ -12,5 +12,6 @@ public interface AlbumMapper {
     @Mapping(source = "category.category", target = "category")
     AlbumDTO albumToAlbumDTO(Album album);
 
+    @Mapping(source = "category.category", target = "category")
     AlbumDetailsDTO albumToAlbumDetailsDTO(Album album);
 }

@@ -17,7 +17,8 @@ import java.util.List;
 @Entity
 @Builder
 @EntityListeners(AuditingEntityListener.class)
-@Table(name = "album")
+@Table(name = "album", uniqueConstraints = @UniqueConstraint(
+        name = "uq_album_import_identity", columnNames = {"import_source", "source_album_id"}))
 public class Album {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -29,10 +30,25 @@ public class Album {
     @Column(name = "cover_image_path")
     private String coverImagePath;
 
+    @Column(name = "cover_original_path")
+    private String coverOriginalPath;
+
+    @Column(name = "cover_400_path")
+    private String cover400Path;
+
+    @Column(name = "cover_800_path")
+    private String cover800Path;
+
+    @Column(name = "import_source", length = 64)
+    private String importSource;
+
+    @Column(name = "source_album_id", length = 255)
+    private String sourceAlbumId;
+
     @Column(name = "release_date")
     private LocalDate releaseDate;
 
-    @Column(name = "description")
+    @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
     @CreatedDate
@@ -48,6 +64,8 @@ public class Album {
     private Category category;
 
     @OneToMany(mappedBy = "album")
+    @OrderBy("discNumber ASC, trackNumber ASC, id ASC")
+    @Builder.Default
     private List<Song> songList = new ArrayList<>();
 
     // ──── Helper methods ────

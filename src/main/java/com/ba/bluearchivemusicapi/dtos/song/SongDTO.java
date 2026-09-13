@@ -16,6 +16,12 @@ public class SongDTO {
 
     private List<String> composers;
 
+    private List<String> associatedArtists;
+
+    private Integer discNumber;
+
+    private Integer trackNumber;
+
     private String audioPath;
 
     private String imagePath;

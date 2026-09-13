@@ -19,6 +19,7 @@ public interface SongMapper {
     @Mapping(source = "album.title", target = "albumTitle")
     @Mapping(source = "songArtists", target = "artists", qualifiedByName = "toArtistNames")
     @Mapping(source = "songArtists", target = "composers", qualifiedByName = "toComposerNames")
+    @Mapping(source = "songArtists", target = "associatedArtists", qualifiedByName = "toAssociatedArtistNames")
     @Mapping(source = "id", target = "id")
     SongDTO songToSongDTO(Song song);
 
@@ -39,6 +40,16 @@ public interface SongMapper {
         if (songArtists == null) return Collections.emptyList();
         return songArtists.stream()
                 .filter(sa -> sa.getType() == SongArtistType.COMPOSER)
+                .map(SongArtist::getArtist)
+                .map(Artist::getName)
+                .collect(Collectors.toList());
+    }
+
+    @Named("toAssociatedArtistNames")
+    default List<String> toAssociatedArtistNames(List<SongArtist> songArtists) {
+        if (songArtists == null) return Collections.emptyList();
+        return songArtists.stream()
+                .filter(sa -> sa.getType() == SongArtistType.ASSOCIATED)
                 .map(SongArtist::getArtist)
                 .map(Artist::getName)
                 .collect(Collectors.toList());

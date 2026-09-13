@@ -103,15 +103,36 @@ Set `ADMIN_API_KEY` in the backend environment. Calls require that value in the
 Source identities select existing records independently of titles. A repeat
 request updates the same record, reuses unchanged stored media and retains an
 existing play count. Responses include `albumId`, `songId` (null for an album),
-`created` and `status`. Shared artists are matched by reviewed display name and
+`created`, `status` and `revision`. Shared artists are matched by reviewed display name and
 linked by role; character/CV pairs currently become combined display names.
 
 The automated API check uses test-only H2 and temporary files.
 It verifies authentication, album-before-track validation,
 repeated publication, public album metadata, stable IDs/credits/play counts and
 unchanged stored bytes. It does not call real R2, PostgreSQL or a browser, and it
-does not reintroduce the removed local-media route. Concurrent metadata-edit
-protection and full publish-to-player verification are still later review work.
+does not reintroduce the removed local-media route. Revision checks are described
+below; full publish-to-player verification remains later review work.
+
+## Outdated publication protection (chapter 15)
+
+Authenticated GET requests at the album and track import URLs return the current
+metadata, media keys and a content fingerprint (`revision`). Changed existing
+content must be published with its last reviewed revision in the
+`X-Catalog-Revision` header. A stale or missing revision returns HTTP 409 with
+the current state, before writing media. Play counts and audit dates do not
+change the fingerprint. Identical content returns `unchanged` without writes,
+so retrying after a lost success response remains safe.
+
+For example, if one review publishes a corrected title, an older review cannot
+silently overwrite that correction while publishing a composer change. It must
+compare the latest content and accept a new baseline first. Existing import
+records are locked during publication so competing updates are checked in order.
+
+The Python comparison interface is chapter 16 and is not applied yet: new records
+and identical retries still work, but publishing changed existing content now
+requires a revision-aware client. Tests cover stale drafts, identical retries,
+edits outside the import endpoint and competing updates using H2 and temporary
+media; real PostgreSQL/R2 and browser verification remain separate.
 
 ## Direct play counting (revised chapter 14)
 

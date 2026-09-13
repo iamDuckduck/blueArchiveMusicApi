@@ -91,6 +91,23 @@ public class CatalogMediaStorage {
         }
     }
 
+    /** Determine the immutable destination without uploading; stale edits fail before media writes. */
+    public String keyFor(MultipartFile file, String logicalKey) {
+        String extension = logicalKey.substring(logicalKey.lastIndexOf('.') + 1);
+        if (file.isEmpty() || !TYPES.containsKey(extension)) throw new IllegalArgumentException("Empty or unsupported catalog media");
+        try (var stream = file.getInputStream()) {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] buffer = new byte[8192];
+            for (int read; (read = stream.read(buffer)) != -1;) digest.update(buffer, 0, read);
+            return "catalog/" + hash(logicalKey.getBytes(StandardCharsets.UTF_8)) + "/"
+                    + HexFormat.of().formatHex(digest.digest()) + "." + extension;
+        } catch (IOException error) {
+            throw new FileUploadException("Cannot inspect catalog media", error);
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException(impossible);
+        }
+    }
+
     private String hash(byte[] bytes) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));

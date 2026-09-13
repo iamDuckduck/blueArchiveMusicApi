@@ -44,6 +44,7 @@ class CatalogImportIntegrationTest {
     @Autowired AlbumRepository albumRepository;
     @Autowired SongRepository songRepository;
     @Autowired SongService songService;
+    @Autowired com.fasterxml.jackson.databind.ObjectMapper mapper;
 
     @Test
     void repeatedPublicationPreservesIdsCreditsPlayCountAndStoredBytes() throws Exception {
@@ -173,14 +174,106 @@ class CatalogImportIntegrationTest {
         assertThat(songRepository.count()).isEqualTo(1);
     }
 
+    @Test
+    void staleEditsConflictBeforeMediaWritesButIdenticalLostResponsesSucceed() throws Exception {
+        String albumPath = "/admin/catalog-import/kivo/albums/veritas-vol-2";
+        mockMvc.perform(get(albumPath)).andExpect(status().isForbidden());
+        mockMvc.perform(get(albumPath).header("X-Admin-Api-Key", KEY))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.exists").value(false));
+        var albumResult = mockMvc.perform(albumRequest()).andExpect(status().isOk()).andReturn();
+        String originalAlbumRevision = mapper.readTree(albumResult.getResponse().getContentAsString()).get("revision").asText();
+        var first = mockMvc.perform(orderedTrack("600", "Reviewed title", "null", "null", 10)).andExpect(status().isOk()).andReturn();
+        var receipt = mapper.readTree(first.getResponse().getContentAsString());
+        String oldRevision = receipt.get("revision").asText();
+        long songId = receipt.get("songId").asLong();
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/user/song/{id}/play", songId))
+                .andExpect(status().isAccepted());
+        mockMvc.perform(get(albumPath + "/tracks/600").header("X-Admin-Api-Key", KEY))
+                .andExpect(jsonPath("$.revision").value(oldRevision));
+        var newer = orderedTrack("600", "Newer published correction", "null", "null", 10);
+        newer.header("X-Catalog-Revision", oldRevision);
+        var updated = mockMvc.perform(newer).andExpect(status().isOk()).andReturn();
+        String newRevision = mapper.readTree(updated.getResponse().getContentAsString()).get("revision").asText();
+        assertThat(newRevision).isNotEqualTo(oldRevision);
+        var repeat = orderedTrack("600", "Newer published correction", "null", "null", 10);
+        repeat.header("X-Catalog-Revision", oldRevision); // Lost response; do not require the unreceived revision.
+        mockMvc.perform(repeat).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("unchanged"))
+                .andExpect(jsonPath("$.songId").value(songId));
+        long filesBefore;
+        try (var paths = java.nio.file.Files.walk(mediaDirectory)) {
+            filesBefore = paths.filter(java.nio.file.Files::isRegularFile).count();
+        }
+        var stale = orderedTrack("600", "Stale draft", "null", "null", 10, new byte[]{99, 98, 97});
+        stale.header("X-Catalog-Revision", oldRevision);
+        mockMvc.perform(stale).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.current.metadata.title").value("Newer published correction"))
+                .andExpect(jsonPath("$.current.revision").value(newRevision));
+        try (var paths = java.nio.file.Files.walk(mediaDirectory)) {
+            assertThat(paths.filter(java.nio.file.Files::isRegularFile).count()).isEqualTo(filesBefore);
+        }
+        assertThat(songRepository.findById(songId).orElseThrow().getPlayCount()).isEqualTo(1);
+        assertThat(songRepository.count()).isEqualTo(1);
+        // An edit outside the import endpoint also changes the computed baseline.
+        var album = albumRepository.findAll().get(0);
+        album.setTitle("Newer album correction");
+        albumRepository.saveAndFlush(album);
+        var staleAlbum = albumRequest();
+        staleAlbum.header("X-Catalog-Revision", originalAlbumRevision);
+        mockMvc.perform(staleAlbum).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.current.metadata.title").value("Newer album correction"));
+        String currentAlbumRevision = mapper.readTree(mockMvc.perform(get(albumPath).header("X-Admin-Api-Key", KEY))
+                .andReturn().getResponse().getContentAsString()).get("revision").asText();
+        var accepted = albumRequest();
+        accepted.header("X-Catalog-Revision", currentAlbumRevision);
+        mockMvc.perform(accepted).andExpect(status().isOk()).andExpect(jsonPath("$.created").value(false));
+    }
+
     private MockMultipartHttpServletRequestBuilder orderedTrack(String id, String title, String disc, String position, int order) {
+        return orderedTrack(id, title, disc, position, order, new byte[]{0, 1, 2, 3, 4, 5});
+    }
+
+    @Test
+    void overlappingChangesFromOneBaselineHaveOnlyOneWinner() throws Exception {
+        mockMvc.perform(albumRequest()).andExpect(status().isOk());
+        var first = mockMvc.perform(orderedTrack("600", "Initial", "1", "1", 1)).andExpect(status().isOk()).andReturn();
+        var receipt = mapper.readTree(first.getResponse().getContentAsString());
+        String revision = receipt.get("revision").asText();
+        long songId = receipt.get("songId").asLong();
+        var start = new java.util.concurrent.CountDownLatch(1);
+        var ready = new java.util.concurrent.CountDownLatch(2);
+        var executor = java.util.concurrent.Executors.newFixedThreadPool(2);
+        try {
+            var attempts = new java.util.ArrayList<java.util.concurrent.Future<Integer>>();
+            for (String title : java.util.List.of("Draft A", "Draft B")) {
+                attempts.add(executor.submit(() -> {
+                    ready.countDown();
+                    if (!start.await(5, java.util.concurrent.TimeUnit.SECONDS)) throw new AssertionError("Start timed out");
+                    var request = orderedTrack("600", title, "1", "1", 1);
+                    request.header("X-Catalog-Revision", revision);
+                    return mockMvc.perform(request).andReturn().getResponse().getStatus();
+                }));
+            }
+            assertThat(ready.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            var statuses = new java.util.ArrayList<Integer>();
+            for (var attempt : attempts) statuses.add(attempt.get(10, java.util.concurrent.TimeUnit.SECONDS));
+            assertThat(statuses).containsExactlyInAnyOrder(200, 409);
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+        }
+        assertThat(songRepository.count()).isEqualTo(1);
+        assertThat(songRepository.findById(songId).orElseThrow().getTitle()).isIn("Draft A", "Draft B");
+    }
+
+    private MockMultipartHttpServletRequestBuilder orderedTrack(String id, String title, String disc, String position, int order, byte[] bytes) {
         MockMultipartHttpServletRequestBuilder request = multipart("/admin/catalog-import/kivo/albums/veritas-vol-2/tracks/" + id);
         request.with(item -> { item.setMethod("PUT"); return item; });
         request.header("X-Admin-Api-Key", KEY);
         request.file(json("metadata", """
                 {"title":"%s","disc":%s,"position":%s,"displayOrder":%d,"kind":"bgm","artists":[],"composers":[],"performers":[]}
                 """.formatted(title, disc, position, order)));
-        request.file(file("audio", "audio.mp3", "audio/mpeg", new byte[]{0, 1, 2, 3, 4, 5}));
+        request.file(file("audio", "audio.mp3", "audio/mpeg", bytes));
         return request;
     }
 

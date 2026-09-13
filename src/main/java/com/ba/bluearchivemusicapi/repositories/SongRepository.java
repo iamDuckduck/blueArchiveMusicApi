@@ -15,6 +15,10 @@ public interface SongRepository extends JpaRepository<Song, Long> {
     Optional<Song> findByAlbumIdAndImportSourceAndSourceTrackId(
             Long albumId, String importSource, String sourceTrackId);
 
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT s FROM Song s WHERE s.album.id = :albumId AND s.importSource = :source AND s.sourceTrackId = :identity")
+    Optional<Song> findImportForUpdate(Long albumId, String source, String identity);
+
     @Modifying
     @Query("UPDATE Song s SET s.playCount = COALESCE(s.playCount, 0) + 1 WHERE s.id = :id")
     int incrementPlayCount(@Param("id") Long id);

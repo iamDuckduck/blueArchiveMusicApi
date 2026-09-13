@@ -51,10 +51,13 @@ class CatalogMediaStorageTest {
     void objectRetryDoesNotPutAndNewUploadHasPlayableContentType() {
         var client = mock(S3Client.class);
         var storage = storage(client, "r2");
+        String predicted = storage.keyFor(audio((byte) 1), "album/track.mp3");
+        verifyNoInteractions(client);
         when(client.headObject(any(HeadObjectRequest.class)))
                 .thenThrow(S3Exception.builder().statusCode(404).build())
                 .thenReturn(HeadObjectResponse.builder().build());
         String key = storage.store(audio((byte) 1), "album/track.mp3");
+        assertThat(key).isEqualTo(predicted);
         assertThat(storage.store(audio((byte) 1), "album/track.mp3")).isEqualTo(key);
         var request = org.mockito.ArgumentCaptor.forClass(PutObjectRequest.class);
         verify(client, times(1)).putObject(request.capture(), any(RequestBody.class));

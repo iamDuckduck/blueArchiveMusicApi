@@ -30,6 +30,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 })
 @ActiveProfiles("test")
 @AutoConfigureMockMvc
+@org.springframework.test.annotation.DirtiesContext(classMode = org.springframework.test.annotation.DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 class CatalogImportIntegrationTest {
     private static final String KEY = "catalog-import-test-only";
     @TempDir static java.nio.file.Path mediaDirectory;
@@ -70,6 +71,7 @@ class CatalogImportIntegrationTest {
         mockMvc.perform(get("/user/albums/{id}/songs", albumId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title").value("青春あんさんぶる Vol.2 「ヴェリタス」"))
+                .andExpect(jsonPath("$.category").value("青春あんさんぶる"))
                 .andExpect(jsonPath("$.songList[0].title").value("Get Over the World"))
                 .andExpect(jsonPath("$.songList[0].trackNumber").value(1))
                 .andExpect(jsonPath("$.songList[0].artists[0]").value("Veritas"))
@@ -97,6 +99,40 @@ class CatalogImportIntegrationTest {
         assertThat(songRepository.count()).isEqualTo(1);
     }
 
+    @Test
+    void displayOrderDoesNotInventOfficialNumbersAndRetriesKeepGaps() throws Exception {
+        mockMvc.perform(albumRequest()).andExpect(status().isOk());
+        mockMvc.perform(trackRequest()).andExpect(status().isOk());
+        long albumId = albumRepository.findAll().get(0).getId();
+        for (int attempt = 0; attempt < 2; attempt++) {
+            mockMvc.perform(orderedTrack("600", "Unknown numbering", "null", "null", 10)).andExpect(status().isOk());
+            mockMvc.perform(orderedTrack("601", "Second disc track four", "2", "4", 30)).andExpect(status().isOk());
+        }
+        assertThat(songRepository.count()).isEqualTo(3);
+        mockMvc.perform(get("/user/albums/{id}/songs", albumId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.songList[0].title").value("Unknown numbering"))
+                .andExpect(jsonPath("$.songList[0].discNumber").isEmpty())
+                .andExpect(jsonPath("$.songList[0].trackNumber").isEmpty())
+                .andExpect(jsonPath("$.songList[0].displayOrder").value(10))
+                .andExpect(jsonPath("$.songList[1].trackNumber").value(1))
+                .andExpect(jsonPath("$.songList[2].discNumber").value(2))
+                .andExpect(jsonPath("$.songList[2].trackNumber").value(4));
+        mockMvc.perform(orderedTrack("602", "Invalid order", "null", "null", 0)).andExpect(status().isBadRequest());
+        assertThat(songRepository.count()).isEqualTo(3);
+    }
+
+    private MockMultipartHttpServletRequestBuilder orderedTrack(String id, String title, String disc, String position, int order) {
+        MockMultipartHttpServletRequestBuilder request = multipart("/admin/catalog-import/kivo/albums/veritas-vol-2/tracks/" + id);
+        request.with(item -> { item.setMethod("PUT"); return item; });
+        request.header("X-Admin-Api-Key", KEY);
+        request.file(json("metadata", """
+                {"title":"%s","disc":%s,"position":%s,"displayOrder":%d,"kind":"bgm","artists":[],"composers":[],"performers":[]}
+                """.formatted(title, disc, position, order)));
+        request.file(file("audio", "audio.mp3", "audio/mpeg", new byte[]{0, 1, 2, 3, 4, 5}));
+        return request;
+    }
+
     private MockMultipartHttpServletRequestBuilder albumRequest() {
         MockMultipartHttpServletRequestBuilder request = multipart(
                 "/admin/catalog-import/kivo/albums/veritas-vol-2");
@@ -117,7 +153,7 @@ class CatalogImportIntegrationTest {
         request.with(item -> { item.setMethod("PUT"); return item; });
         request.header("X-Admin-Api-Key", KEY);
         request.file(json("metadata", """
-                {"title":"Get Over the World","disc":1,"position":1,"kind":"vocal","description":"","artists":["Veritas"],"composers":["Veritas","Nor"],"performers":[{"character":"チヒロ","voiceActor":"山村響"}]}
+                {"title":"Get Over the World","disc":1,"position":1,"displayOrder":20,"kind":"vocal","description":"","artists":["Veritas"],"composers":["Veritas","Nor"],"performers":[{"character":"チヒロ","voiceActor":"山村響"}]}
                 """));
         request.file(file("audio", "audio.mp3", "audio/mpeg", new byte[]{0, 1, 2, 3, 4, 5}));
         return request;

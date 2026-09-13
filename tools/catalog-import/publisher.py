@@ -51,6 +51,7 @@ class Publisher:
             track_metadata = {
                 "title": fields["title"], "disc": fields["disc"],
                 "position": fields["position"], "kind": fields["kind"],
+                "displayOrder": fields["display_order"],
                 "description": fields["notes"], "artists": fields["group"],
                 "composers": fields["composer"],
                 "performers": [{"character": item["character"], "voiceActor": item["voice_actor"]}

@@ -89,8 +89,9 @@ class Store:
                 item.update(previous)
                 item.update(status="ready" if previous.get("status") == "ready" else "failed",
                             error="Interrupted. Previous validated files are retained; retry to check for updates.")
-        for track in state["tracks"]:
+        for order, track in enumerate(state["tracks"], 1):
             track.setdefault("publish_selected", track["included"] and track["source_id"] is not None)
+            track["suggestions"].setdefault("display_order", order)
 
     def read(self):
         with self.lock, self.connect() as db:
@@ -120,7 +121,7 @@ class Store:
 
     def save_edits(self, payload):
         album_fields = {"title", "category", "release_date", "notes", "gamekee_url"}
-        track_fields = {"title", "position", "disc", "kind", "group", "performers", "composer", "notes"}
+        track_fields = {"title", "position", "disc", "display_order", "kind", "group", "performers", "composer", "notes"}
 
         def validate(values, allowed):
             if not isinstance(values, dict) or values.keys() - allowed:
@@ -128,6 +129,9 @@ class Store:
             for key, value in values.items():
                 if key in CREDIT_FIELDS:
                     values[key] = credit_entries(key, value)
+                elif key == "display_order":
+                    if type(value) is not int or not 1 <= value <= 999999:
+                        raise ValueError("Display order must be between 1 and 999999; leave official numbering blank if unknown.")
                 elif key in {"position", "disc"}:
                     if value is not None and (type(value) is not int or not 1 <= value <= 999):
                         raise ValueError("Track and disc numbers must be between 1 and 999, or blank.")

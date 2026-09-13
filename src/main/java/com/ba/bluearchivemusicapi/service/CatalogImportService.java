@@ -79,6 +79,7 @@ public class CatalogImportService {
         song.setDescription(input.description());
         song.setDiscNumber(input.disc());
         song.setTrackNumber(input.position());
+        song.setDisplayOrder(input.displayOrder());
         song.setMusicKind(input.kind());
         song.setAudioPath(audioPath);
         song.setImagePath(album.getCover400Path());

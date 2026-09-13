@@ -172,3 +172,7 @@ Create an identified official release and map selected source tracks into it. Th
 ## Refresh source and media
 
 Explicit refresh downloads and validates again even at an unchanged URL. Failed or interrupted replacement retains prior validated files. Identical bytes reuse paths; changed audio or artwork requires publication reselection.
+
+## Display order
+
+Display order controls the album sequence independently of nullable official disc/track numbers. New tracks append after the reviewed sequence. The import API requires positive `displayOrder`; migration V1.10 backfills existing order without inventing official numbers.

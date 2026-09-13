@@ -64,7 +64,7 @@ public class Album {
     private Category category;
 
     @OneToMany(mappedBy = "album")
-    @OrderBy("discNumber ASC, trackNumber ASC, id ASC")
+    @OrderBy("displayOrder ASC, discNumber ASC, trackNumber ASC, id ASC")
     @Builder.Default
     private List<Song> songList = new ArrayList<>();
 

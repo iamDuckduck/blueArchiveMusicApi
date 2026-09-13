@@ -22,6 +22,8 @@ public class SongDTO {
 
     private Integer trackNumber;
 
+    private Integer displayOrder;
+
     private String audioPath;
 
     private String imagePath;

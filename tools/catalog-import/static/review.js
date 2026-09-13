@@ -33,7 +33,7 @@ function updateSaveStatus() {
 
 function field(trackId, name, label, value, type = "text") {
   const attributes = `data-track-id="${trackId}" data-track-field="${name}"`;
-  const input = type === "textarea" ? `<textarea ${attributes} rows="3">${escapeHtml(value)}</textarea>` : `<input ${attributes} type="${type}" ${type === "number" ? 'min="1" max="999"' : 'maxlength="20000"'} value="${escapeHtml(value)}">`;
+  const input = type === "textarea" ? `<textarea ${attributes} rows="3">${escapeHtml(value)}</textarea>` : `<input ${attributes} type="${type}" ${type === "number" ? `min="1" max="${name === "display_order" ? 999999 : 999}"` : 'maxlength="20000"'} value="${escapeHtml(value)}">`;
   return `<label>${label}${input}</label>`;
 }
 
@@ -89,9 +89,10 @@ function createTrack(track) {
     <label class="inclusion"><input type="checkbox" data-publication="${track.id}"> Publish this reviewed track (after preparation)</label>
     <div class="track-fields">
       <div class="wide">${field(track.id, "title", "Track title", f.title)}</div>
-      <div class="track-order wide">${field(track.id, "disc", "Disc", f.disc, "number")}${field(track.id, "position", "Track", f.position, "number")}
+      <div class="track-order wide">${field(track.id, "display_order", "Display order", f.display_order, "number")}${field(track.id, "disc", "Official disc (if known)", f.disc, "number")}${field(track.id, "position", "Official track (if known)", f.position, "number")}
         <label>Music type<select data-track-id="${track.id}" data-track-field="kind"><option value="vocal">Vocal</option><option value="instrumental">Instrumental</option><option value="bgm">Background music</option><option value="unsure">Needs checking</option><option value="drama">Spoken drama</option></select></label>
       </div>
+      <p class="helper wide">Display order controls the album's app sequence. Match the known release order; leave unknown official disc/track numbers blank.</p>
       ${creditEditor(track.id, "group", "Credited artists / groups", "The credited artist or unit, such as Veritas. A group is optional for a solo character song.")}
       ${creditEditor(track.id, "composer", "Composers", "Who composed the music. Add a separate entry for each composer.")}
       ${creditEditor(track.id, "performers", "Characters and voice actors", "The individual participants on this track. Each row keeps a character and their voice actor together; fill the names you know.")}
@@ -190,6 +191,7 @@ function render(state) {
     const warnings = [];
     if (track.index_warning) warnings.push(track.index_warning);
     if (track.missing_index) warnings.push("Not in the latest source index. Saved track, files and publication are retained.");
+    if (track.fields.position == null) warnings.push("Official track number is unknown; the app will use display order without inventing a track number.");
     if (track.source_error) warnings.push("Kivo: " + track.source_error + (track.source ? " Saved source information is retained." : ""));
     if (track.media.error) warnings.push("Preparation: " + track.media.error);
     if (!track.fields.composer.length) warnings.push("Composer not filled yet. File tags may help after preparation, or you can add it manually.");

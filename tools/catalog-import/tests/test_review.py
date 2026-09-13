@@ -58,6 +58,19 @@ class SavedReviewTests(unittest.TestCase):
             self.store.save_edits({"album": {"title": "Must not save"}, "tracks": {"255": {"position": -1}}})
         self.assertNotEqual(self.store.view()["album"]["fields"]["title"], "Must not save")
 
+    def test_display_order_is_saved_separately_from_unknown_official_numbers(self):
+        self.store.save_edits({"tracks":{"255":{"position":None, "disc":None, "display_order":10}}})
+        with patch("sources.fetch_kivo", side_effect=record):
+            ReviewService(self.store).fetch_tracks()
+        saved = Store(self.temp.name).view()
+        fields = find_track(saved, 255)["fields"]
+        self.assertEqual(fields["display_order"], 10)
+        self.assertIsNone(fields["position"])
+        self.assertIsNone(fields["disc"])
+        for order in [None, True, 0, 1000000]:
+            with self.assertRaises(ValueError):
+                self.store.save_edits({"tracks":{"255":{"display_order":order}}})
+
     def test_old_credit_text_is_preserved_as_individual_entries(self):
         self.store.update(lambda s: find_track(s, 255)["edits"].update(
             group="Veritas", composer="Nor\nAnother composer", performers="チヒロ (CV: 山村響)\nUnresolved credit"))
@@ -338,6 +351,7 @@ class PublisherTests(unittest.TestCase):
         self.assertEqual(put.call_count, 3)
         self.assertTrue(put.call_args_list[0].args[0].endswith("/kivo/albums/veritas-vol-2"))
         self.assertTrue(put.call_args_list[1].args[0].endswith("/kivo/albums/veritas-vol-2/tracks/255"))
+        self.assertEqual(json.loads(put.call_args_list[1].kwargs["files"]["metadata"][1])["displayOrder"], 1)
 
     def test_publish_failure_is_visible_and_retryable(self):
         failing = Mock()

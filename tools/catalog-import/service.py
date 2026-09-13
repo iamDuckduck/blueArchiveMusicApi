@@ -4,7 +4,7 @@ import threading
 
 import media
 import sources
-from store import find_track, now
+from store import find_track, now, propose_fields
 
 
 class ReviewService:
@@ -68,8 +68,10 @@ class ReviewService:
                     if row["source"] and row["source"] != data:
                         row.setdefault("source_history", []).append({"fetched_at":row.get("source_fetched_at"), "raw":row["source"]})
                         row["publish_selected"] = False
+                        propose_fields(row, "kivo", sources.suggestions_from_kivo(data), sources.suggestions_from_kivo(row["source"]))
+                    elif not row["source"]:
+                        row["suggestions"].update(sources.suggestions_from_kivo(data))
                     row.update(source=data, source_status="ready", source_error="", source_fetched_at=now())
-                    row["suggestions"].update(sources.suggestions_from_kivo(data))
                     if row.get("pending_index"):
                         row["index"] = row.pop("pending_index")
                         row.pop("index_warning", None)
@@ -139,8 +141,11 @@ class ReviewService:
                         row.setdefault("media_history", []).append(previous)
                         row["publish_selected"] = False
                     row["media"] = prepared
+                    if previous.get("status") == "ready":
+                        propose_fields(row, "tags", sources.suggestions_from_tags(prepared["tags"]), sources.suggestions_from_tags(row["tags"]))
+                    else:
+                        row["suggestions"].update(sources.suggestions_from_tags(prepared["tags"]))
                     row["tags"] = prepared["tags"]
-                    row["suggestions"].update(sources.suggestions_from_tags(prepared["tags"]))
 
                 self.store.update(save)
             except Exception as error:

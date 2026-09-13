@@ -98,7 +98,7 @@ function createTrack(track) {
       ${creditEditor(track.id, "performers", "Characters and voice actors", "The individual participants on this track. Each row keeps a character and their voice actor together; fill the names you know.")}
       <div class="wide">${field(track.id, "notes", "Your notes / manual corrections", f.notes, "textarea")}</div>
     </div>
-    <div class="audio-area"></div><div class="track-warnings"></div>
+    <div class="audio-area"></div><div class="track-warnings"></div><div class="source-proposals"></div>
     <details><summary>Compare source information</summary><div class="evidence-grid"><div><h4>Kivo description &amp; original fields</h4><a class="kivo-link text-link" target="_blank" rel="noopener noreferrer">Open source record ↗</a><pre class="kivo-evidence"></pre></div><div><h4>Embedded audio tags</h4><pre class="tag-evidence"></pre></div></div><p class="helper">Credits are suggestions. A source’s generic author field is not automatically a composer.</p></details>`;
   return element;
 }
@@ -107,6 +107,38 @@ function setBadge(element, status, customLabel) {
   element.classList.remove("pending", "ready", "failed", "running", "excluded", "review", "included", "skipped");
   element.classList.add("badge", status);
   element.textContent = customLabel || statusLabels[status] || status;
+}
+
+function renderSuggestions(card, track, busy) {
+  const pending = track.pending_suggestions || {};
+  const container = $(".source-proposals", card);
+  const serialized = JSON.stringify({pending, fields:track.fields});
+  if (container.dataset.rendered !== serialized) {
+    container.replaceChildren();
+    if (Object.keys(pending).length) {
+      const heading = document.createElement("h4");
+      heading.textContent = "Incoming source changes — your reviewed values are unchanged";
+      container.append(heading);
+      for (const [source, fields] of Object.entries(pending)) for (const [field, value] of Object.entries(fields)) {
+        const row = document.createElement("div");
+        row.innerHTML = `<p>${escapeHtml(source)} · ${escapeHtml(field)}</p><div class="evidence-grid">
+          <div><h4>Reviewed</h4><pre>${escapeHtml(JSON.stringify(track.fields[field], null, 2))}</pre></div>
+          <div><h4>Incoming</h4><pre>${escapeHtml(JSON.stringify(value, null, 2))}</pre></div></div>
+          <button type="button" class="button secondary" data-suggestion-choice="use" data-source="${escapeHtml(source)}" data-field="${escapeHtml(field)}" data-track-id="${track.id}">Use suggestion</button>
+          <button type="button" class="button quiet" data-suggestion-choice="keep" data-source="${escapeHtml(source)}" data-field="${escapeHtml(field)}" data-track-id="${track.id}">Keep reviewed value</button>`;
+        container.append(row);
+      }
+      const keep = document.createElement("button");
+      keep.type = "button";
+      keep.className = "button secondary";
+      keep.dataset.suggestionChoice = "keep";
+      keep.dataset.trackId = track.id;
+      keep.textContent = "Keep all reviewed values for this track";
+      container.append(keep);
+    }
+    container.dataset.rendered = serialized;
+  }
+  for (const button of container.querySelectorAll("button")) button.disabled = busy;
 }
 
 function render(state) {
@@ -158,6 +190,7 @@ function render(state) {
     const duration = track.media.duration;
     $(".track-meta", card).textContent = track.source_id ? `Kivo #${track.source_id}${duration ? " · " + Math.floor(duration / 60) + ":" + String(Math.floor(duration % 60)).padStart(2, "0") + " · " + track.media.codec : ""}` : "Release listing · original position 3";
     if (track.id === "drama") continue;
+    renderSuggestions(card, track, busy);
     for (const input of card.querySelectorAll("[data-track-field]")) {
       if (!(input.dataset.trackField in (pending.tracks[track.id] || {}))) input.value = track.fields[input.dataset.trackField] ?? "";
     }
@@ -243,6 +276,14 @@ $("#review-form").addEventListener("input", event => {
   updateSaveStatus();
 });
 $("#review-form").addEventListener("click", event => {
+  const suggestion = event.target.closest("[data-suggestion-choice]");
+  if (suggestion) {
+    const track = review.tracks.find(t => t.id === suggestion.dataset.trackId);
+    const {source, field, suggestionChoice} = suggestion.dataset;
+    const proposals = source ? {[source]:{[field]:track.pending_suggestions[source][field]}} : track.pending_suggestions;
+    act(`/api/tracks/${track.id}/suggestions`, {proposals, choice:suggestionChoice});
+    return;
+  }
   const button = event.target.closest("[data-add-credit], [data-remove-credit]");
   if (!button) return;
   const editor = button.closest("[data-credit-field]");

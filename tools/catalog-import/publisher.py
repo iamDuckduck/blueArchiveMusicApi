@@ -92,6 +92,9 @@ class Publisher:
         if any(t["media"].get("status") != "ready" or not t["media"].get("path") for t in tracks):
             raise ValueError("Every track selected for publication must be prepared. Leave missing tracks unselected to publish available music.")
 
+        if any(t.get("pending_suggestions") for t in tracks):
+            raise ValueError("Compare incoming source suggestions for selected tracks: use them or keep the reviewed values before publishing.")
+
     def _result(self, response):
         if not 200 <= response.status_code < 300:
             raise ValueError(f"Backend rejected publication ({response.status_code}): {response.text[:500]}")

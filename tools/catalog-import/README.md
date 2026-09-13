@@ -176,3 +176,7 @@ Explicit refresh downloads and validates again even at an unchanged URL. Failed 
 ## Display order
 
 Display order controls the album sequence independently of nullable official disc/track numbers. New tracks append after the reviewed sequence. The import API requires positive `displayOrder`; migration V1.10 backfills existing order without inventing official numbers.
+
+## Review changed source fields
+
+Changed Kivo/tag fields appear beside reviewed values. Use a suggestion or keep the reviewed value for each field; unresolved proposals block selected-track publication. Decisions persist and clear publication selection.

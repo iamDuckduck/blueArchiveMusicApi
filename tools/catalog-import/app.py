@@ -202,6 +202,19 @@ def create_app(data_dir=None, backend_url="http://127.0.0.1:8080", api_key=None)
         service.start(action)
         return jsonify(current_view()), 202
 
+    @app.post("/api/tracks/<track_id>/suggestions")
+    def review_source_suggestions(track_id):
+        if store.read()["job"].get("running"):
+            raise ValueError("Wait for the local job to finish.")
+        if track_id not in {t["id"] for t in store.read()["tracks"] if t["source_id"] is not None}:
+            abort(404)
+        payload = request.get_json()
+        if not isinstance(payload, dict):
+            raise ValueError("Choose incoming suggestions to review.")
+        store.review_suggestions(track_id, payload.get("proposals"), payload.get("choice"))
+        return jsonify(current_view())
+
+
     def local_media(relative):
         target = (store.directory / relative).resolve()
         media_root = (store.directory / "media").resolve()

@@ -13,7 +13,7 @@ from media import digest, inspect_audio, prepare_audio, prepare_cover, resize_co
 from publisher import Publisher
 from service import ReviewService
 from sources import content_text, cv_names, fetch_gamekee, suggestions_from_kivo, suggestions_from_tags
-from store import Store, find_track
+from store import Store, find_track, propose_fields
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -98,6 +98,44 @@ class SavedReviewTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.store.save_edits({"album":{"title":"Must not save"}, "tracks":{"255":invalid}})
             self.assertNotEqual(self.store.view()["album"]["fields"]["title"], "Must not save")
+
+
+    def test_changed_details_are_proposals_until_used_or_kept(self):
+        service = ReviewService(self.store)
+        with patch("sources.fetch_kivo", side_effect=record):
+            service.fetch_tracks()
+        before = find_track(self.store.view(), 255)["fields"]["title"]
+        def updated(identity):
+            data = record(identity)
+            data["title"] = "Incoming corrected title"
+            return data
+        with patch("sources.fetch_kivo", side_effect=updated):
+            service.fetch_tracks()
+        row = find_track(self.store.view(), 255)
+        self.assertEqual(row["fields"]["title"], before)
+        self.assertEqual(row["pending_suggestions"]["kivo"]["title"], "Incoming corrected title")
+        self.assertEqual(len(row["source_history"]), 1)
+        self.store.review_suggestions("255", row["pending_suggestions"], "keep")
+        with patch("sources.fetch_kivo", side_effect=updated):
+            service.fetch_tracks()
+        kept = find_track(Store(self.temp.name).view(), 255)
+        self.assertEqual(kept["fields"]["title"], before)
+        self.assertFalse(kept["pending_suggestions"])
+        other = find_track(self.store.view(), 256)
+        self.store.review_suggestions("256", other["pending_suggestions"], "use")
+        self.assertEqual(find_track(self.store.view(), 256)["fields"]["title"], "Incoming corrected title")
+
+
+    def test_tag_proposals_preserve_manual_credits_and_reject_stale_review_actions(self):
+        self.store.save_edits({"tracks":{"255":{"composer":["Owner correction"]}}})
+        self.store.update(lambda s: propose_fields(find_track(s, 255), "tags", {"composer":"Incoming composer"}, {"composer":"Old composer"}))
+        row = find_track(self.store.view(), 255)
+        self.assertEqual(row["fields"]["composer"], ["Owner correction"])
+        self.assertEqual(row["pending_suggestions"]["tags"]["composer"], ["Incoming composer"])
+        with self.assertRaises(ValueError):
+            self.store.review_suggestions("255", {"tags":{"composer":["Earlier unseen value"]}}, "use")
+        self.store.review_suggestions("255", row["pending_suggestions"], "use")
+        self.assertEqual(find_track(self.store.view(), 255)["fields"]["composer"], ["Incoming composer"])
 
 
 class SourceTests(unittest.TestCase):
@@ -400,6 +438,14 @@ class PublisherTests(unittest.TestCase):
         self.assertTrue(missing["included"])
         self.assertEqual(missing["media"]["error"], "Missing audio")
         self.assertEqual(put.call_args_list[1].kwargs["files"]["audio"][2], "audio/mpeg")
+
+
+    def test_unreviewed_source_proposals_block_selected_tracks_before_any_upload(self):
+        self.store.update(lambda s: find_track(s, 255).update(pending_suggestions={"kivo":{"title":"Incoming"}}))
+        with patch("publisher.requests.put") as put:
+            with self.assertRaisesRegex(ValueError, "incoming source"):
+                Publisher(self.store, "http://127.0.0.1:8080", "secret").publish()
+            put.assert_not_called()
 
 
 class BrowserApiTests(unittest.TestCase):

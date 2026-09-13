@@ -84,7 +84,11 @@ class Store:
             state["job"] = {"running": False, "message": "Preparation was interrupted. Retry to continue."}
         for item in [state["album"]["cover"], *(t["media"] for t in state["tracks"])]:
             if item["status"] == "running":
-                item.update(status="failed", error="Interrupted. Retry to continue.")
+                previous = item.pop("previous", {})
+                item.clear()
+                item.update(previous)
+                item.update(status="ready" if previous.get("status") == "ready" else "failed",
+                            error="Interrupted. Previous validated files are retained; retry to check for updates.")
         for track in state["tracks"]:
             track.setdefault("publish_selected", track["included"] and track["source_id"] is not None)
 

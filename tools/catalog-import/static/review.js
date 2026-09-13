@@ -127,6 +127,7 @@ function render(state) {
   $("#include").textContent = album.decision === "included" ? "Album included ✓" : "Include album";
   $("#skip").disabled = busy || album.decision === "skipped";
   $("#prepare").disabled = busy || album.decision !== "included";
+  $("#refresh-media").disabled = busy || album.decision !== "included";
   $("#prepare").textContent = busy && state.job.action === "prepare" ? "Preparing files…" : "Prepare / retry tracks";
   const cover = album.cover;
   const publication = state.publication || {status:"pending", message:"Not published.", enabled:false};
@@ -135,7 +136,7 @@ function render(state) {
   $("#publish").disabled = busy || !publication.enabled || album.decision !== "included" || cover.status !== "ready" || !selectedTracks.length || selectedTracks.some(t => t.media.status !== "ready");
   $("#publish").textContent = busy && state.job.action === "publish" ? "Publishing…" : publication.status === "ready" ? "Publish again safely" : "Publish reviewed album";
   $("#job-message").textContent = state.job.message;
-  $("#cover-status").textContent = cover.status === "ready" ? "Cover ready · original preserved · 400 px and 800 px copies saved" : cover.error ? "Cover: " + cover.error : "Cover: " + (statusLabels[cover.status] || cover.status);
+  $("#cover-status").textContent = cover.error ? "Cover: " + cover.error + (cover.status === "ready" ? " Previous validated cover retained." : "") : cover.status === "ready" ? "Cover ready · original preserved · 400 px and 800 px copies saved" : "Cover: " + (statusLabels[cover.status] || cover.status);
   if (cover.status === "ready") {
     const coverKey = cover.files["400"].sha256;
     if ($("#cover-art").dataset.key !== coverKey) {
@@ -188,6 +189,7 @@ function render(state) {
     }
     const warnings = [];
     if (track.index_warning) warnings.push(track.index_warning);
+    if (track.missing_index) warnings.push("Not in the latest source index. Saved track, files and publication are retained.");
     if (track.source_error) warnings.push("Kivo: " + track.source_error + (track.source ? " Saved source information is retained." : ""));
     if (track.media.error) warnings.push("Preparation: " + track.media.error);
     if (!track.fields.composer.length) warnings.push("Composer not filled yet. File tags may help after preparation, or you can add it manually.");
@@ -263,6 +265,7 @@ $("#review-form").addEventListener("submit", async event => {
 });
 $("#fetch").addEventListener("click", () => act("/api/jobs/fetch"));
 $("#prepare").addEventListener("click", () => act("/api/jobs/prepare"));
+$("#refresh-media").addEventListener("click", () => act("/api/jobs/refresh"));
 $("#publish").addEventListener("click", () => act("/api/jobs/publish"));
 $("#retry-gamekee").addEventListener("click", () => act("/api/jobs/gamekee"));
 $("#include").addEventListener("click", () => act("/api/decision", {decision:"included"}));

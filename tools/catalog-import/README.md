@@ -168,3 +168,7 @@ they are not automatically included for preparation or selected for publication.
 ## Map release appearances
 
 Create an identified official release and map selected source tracks into it. The same recording can have separate album appearances. Link renamed source labels to existing releases without discarding saved reviews.
+
+## Refresh source and media
+
+Explicit refresh downloads and validates again even at an unchanged URL. Failed or interrupted replacement retains prior validated files. Identical bytes reuse paths; changed audio or artwork requires publication reselection.

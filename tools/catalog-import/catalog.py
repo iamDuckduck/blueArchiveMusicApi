@@ -8,6 +8,7 @@ import uuid
 from collections import defaultdict
 from contextlib import contextmanager
 from pathlib import Path
+from urllib.parse import urlparse
 
 import requests
 
@@ -116,7 +117,7 @@ class Catalog:
 
         def mutate(state):
             candidates = state["candidates"]
-            by_label = {c["source_album"]: c for c in candidates.values()}
+            by_label = {c["source_album"]: c for c in candidates.values() if not c.get("manual")}
             changed = not state["snapshots"] or state["snapshots"][-1]["records"] != records
             if changed:
                 state["snapshots"].append({"fetched_at": timestamp, "records": records})
@@ -151,7 +152,9 @@ class Catalog:
         return {"scan": state["scan"], "snapshot_count": len(state["snapshots"]),
                 "candidates": [dict(id=c["id"], source_album=c["source_album"], kind=c["kind"],
                                     decision=c["decision"], track_count=len(c["records"]),
-                                    change_count=len(c["changes"]), seen_in_latest_scan=c["seen_in_latest_scan"])
+                                    change_count=len(c["changes"]), seen_in_latest_scan=c["seen_in_latest_scan"],
+                                    redirect_to=c.get("redirect_to"), manual=c.get("manual", False),
+                                    mapped_track_count=len(c.get("mapped_records", {})))
                                for c in state["candidates"].values()]}
 
     def decide(self, identity, decision):
@@ -164,24 +167,118 @@ class Catalog:
             candidate = state["candidates"].get(identity)
             if candidate is None:
                 raise ValueError("Unknown candidate.")
+            if candidate.get("redirect_to"):
+                raise ValueError("This source label is linked to an existing release. Review that release instead.")
             if decision == "included" and candidate["kind"] in {"source_grouping", "unresolved"}:
                 raise ValueError("Identify an official release for these tracks first; a source grouping is not an album.")
             candidate.update(decision=decision, reviewed_at=now())
         return self.update(mutate)
 
+    def create_release(self, payload):
+        if self.job_lock.locked():
+            raise ValueError("Wait for the local job to finish.")
+        identity = payload.get("id")
+        try:
+            if str(uuid.UUID(identity)) != identity:
+                raise ValueError()
+        except (ValueError, TypeError, AttributeError):
+            raise ValueError("A stable UUID is required for this release.")
+        title, category = payload.get("title"), payload.get("category")
+        reference = payload.get("reference", "")
+        if not all(isinstance(v, str) and v.strip() and len(v) <= 255 for v in [title, category]):
+            raise ValueError("Enter an identified official release title and category (up to 255 characters).")
+        if payload.get("official") is not True:
+            raise ValueError("Confirm this is an identified official release.")
+        if not isinstance(reference, str) or len(reference) > 2000:
+            raise ValueError("Invalid release reference.")
+        if reference and (urlparse(reference).scheme != "https" or not urlparse(reference).hostname or urlparse(reference).username):
+            raise ValueError("Release references must be public HTTPS URLs.")
+
+        def mutate(state):
+            existing = state["candidates"].get(identity)
+            if existing:
+                if not existing.get("manual") or existing["source_album"] != title.strip():
+                    raise ValueError("This release identity is already used. Open the saved release.")
+                return
+            timestamp = now()
+            state["candidates"][identity] = {"id": identity, "source_album": title.strip(), "category": category.strip(),
+                "reference": reference, "kind": "release_candidate", "manual": True, "decision": "review",
+                "first_seen": timestamp, "records": [], "previous_records": [], "changes": [],
+                "seen_in_latest_scan": False, "mapped_records": {}}
+        return self.update(mutate)
+
+    def map_tracks(self, source_id, target_id, track_ids):
+        if self.job_lock.locked():
+            raise ValueError("Wait for the local job to finish.")
+        if not isinstance(source_id, str) or not isinstance(target_id, str):
+            raise ValueError("Choose a source and target release.")
+        if not isinstance(track_ids, list) or not track_ids or any(type(i) is not int for i in track_ids):
+            raise ValueError("Select source track IDs to map.")
+
+        def mutate(state):
+            source = state["candidates"].get(source_id)
+            target = state["candidates"].get(target_id)
+            if not source or not target or target["kind"] != "release_candidate" or target.get("redirect_to") or target["decision"] == "grouping":
+                raise ValueError("Choose a source and an identified target release, not another grouping.")
+            available = {row["id"]: row for row in self.release_records(state, source)}
+            if any(i not in available for i in track_ids):
+                raise ValueError("One selected track is not present in this saved source. Reload the candidate.")
+            mapped = target.setdefault("mapped_records", {})
+            for identity in track_ids:
+                mapped.setdefault(str(identity), {"source_candidate": source_id, "record": available[identity], "mapped_at": now()})
+        return self.update(mutate)
+
+    def link_release(self, source_id, target_id):
+        """Resolve a duplicate/renamed source label without inventing another public release."""
+        if self.job_lock.locked():
+            raise ValueError("Wait for the local job to finish.")
+        if not isinstance(source_id, str) or not isinstance(target_id, str):
+            raise ValueError("Choose a source and target release.")
+
+        def mutate(state):
+            source, target = (state["candidates"].get(i) for i in [source_id, target_id])
+            if (not source or not target or source_id == target_id or source.get("manual")
+                    or source["kind"] != "release_candidate" or target["kind"] != "release_candidate"
+                    or target.get("redirect_to") or target["decision"] == "grouping"):
+                raise ValueError("Choose two release candidates, with an existing release as the target.")
+            source_path = self.directory if source_id == "veritas-vol-2" else self.directory / "releases" / source_id
+            if (source_path / "reviews.sqlite3").exists():
+                raise ValueError("This source already has a saved review. Keep it intact; map individual tracks instead of merging reviews.")
+            if any(c.get("redirect_to") == source_id for c in state["candidates"].values()):
+                raise ValueError("This release already owns linked source labels. Use it as the target.")
+            if source.get("redirect_to") not in {None, target_id}:
+                raise ValueError("This source is already linked to a different release.")
+            source.update(redirect_to=target_id, decision="linked", reviewed_at=now())
+        return self.update(mutate)
+
+    @staticmethod
+    def release_records(state, candidate):
+        rows = {r["id"]: r for r in candidate["records"]}
+        for linked in state["candidates"].values():
+            if linked.get("redirect_to") == candidate["id"]:
+                rows.update({r["id"]: r for r in linked["records"]})
+        latest = {r["id"]: r for r in state["snapshots"][-1]["records"]} if state["snapshots"] else {}
+        for key, mapped in candidate.get("mapped_records", {}).items():
+            identity = int(key)
+            rows[identity] = latest.get(identity, mapped["record"])
+        return list(rows.values())
+
     def open_review(self, identity):
-        candidate = self.read()["candidates"].get(identity)
+        catalog = self.read()
+        candidate = catalog["candidates"].get(identity)
         if candidate is None:
             raise ValueError("Unknown candidate.")
+        if candidate.get("redirect_to"):
+            raise ValueError("This source label is linked to another release. Open the target release.")
         if candidate["kind"] != "release_candidate" or candidate["decision"] == "grouping":
             raise ValueError("This is a source grouping or unidentified release, not an approved album candidate.")
         label = candidate["source_album"]
-        category = next((name for name in ["青春あんさんぶる", "絆ダイアローグ", "OST"] if name in label), "")
+        category = candidate.get("category") or next((name for name in ["青春あんさんぶる", "絆ダイアローグ", "OST"] if name in label), "")
         initial = {"album": {"id": identity, "decision": candidate["decision"],
                               "suggestions": {"title": label, "category": category, "release_date": "", "notes": ""},
                               "edits": {}, "cover": {"status": "pending"}},
-                   "tracks": [draft_track(record) for record in candidate["records"]],
-                   "gamekee": {"status": "pending", "url": ""}, "release_reference": "",
+                   "tracks": [draft_track(record) for record in self.release_records(catalog, candidate)],
+                   "gamekee": {"status": "pending", "url": ""}, "release_reference": candidate.get("reference", ""),
                    "publication": {"status": "pending", "message": "Not published."},
                    "job": {"running": False, "message": "Select music tracks, then load source details."}, "saved_at": now()}
         directory = self.directory if identity == "veritas-vol-2" else self.directory / "releases" / identity
@@ -192,15 +289,20 @@ class Catalog:
 
     def sync_review(self, store, candidate=None):
         saved = store.read()
-        candidate = candidate or self.read()["candidates"].get(saved["album"]["id"])
+        catalog = self.read()
+        candidate = candidate or catalog["candidates"].get(saved["album"]["id"])
         if candidate is None or saved["job"].get("running"):
             return
-        if saved.get("last_index") == candidate["records"]:
+        records = self.release_records(catalog, candidate)
+        latest_ids = {r["id"] for r in catalog["snapshots"][-1]["records"]} if catalog["snapshots"] else set()
+        known_ids = {t["source_id"] for t in saved["tracks"] if t["source_id"] is not None} | {r["id"] for r in records}
+        missing_ids = sorted(known_ids - latest_ids)
+        if saved.get("last_index") == records and saved.get("missing_index_ids") == missing_ids:
             return
 
         def mutate(state):
             tracks = {t["source_id"]: t for t in state["tracks"] if t["source_id"] is not None}
-            incoming = {r["id"]: r for r in candidate["records"]}
+            incoming = {r["id"]: r for r in records}
             for identity, record in incoming.items():
                 if state["album"]["id"] == "veritas-vol-2" and identity == 257:
                     reference = next((t for t in state["tracks"] if t["id"] == "drama"), None)
@@ -215,10 +317,16 @@ class Catalog:
                     track = tracks[identity]
                     track["pending_index"] = record
                     track["index_warning"] = "Source index changed. Compare the incoming record and explicitly reload details; saved corrections are retained."
+                else:
+                    tracks[identity].pop("pending_index", None)
+                    tracks[identity].pop("index_warning", None)
             for identity, track in tracks.items():
-                if identity not in incoming:
-                    track["index_warning"] = "Not in the latest source index. Saved track, files and publication are retained."
-            state["last_index"] = candidate["records"]
+                if identity not in incoming or identity in missing_ids:
+                    track["missing_index"] = True
+                else:
+                    track.pop("missing_index", None)
+            state["last_index"] = records
+            state["missing_index_ids"] = missing_ids
         store.update(mutate)
 
     def start_scan(self):

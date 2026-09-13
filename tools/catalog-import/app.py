@@ -112,6 +112,30 @@ def create_app(data_dir=None, backend_url="http://127.0.0.1:8080", api_key=None)
             reviews[identity][0].update(lambda s: s["album"].update(decision="skipped" if decision == "grouping" else decision))
         return jsonify(catalog.view())
 
+    @app.post("/api/catalog/releases")
+    def create_release():
+        payload = request.get_json()
+        if not isinstance(payload, dict):
+            raise ValueError("Expected release fields.")
+        catalog.create_release(payload)
+        return jsonify(catalog.view())
+
+    @app.post("/api/catalog/<identity>/map")
+    def map_source_tracks(identity):
+        payload = request.get_json()
+        if not isinstance(payload, dict):
+            raise ValueError("Expected target release and source tracks.")
+        catalog.map_tracks(identity, payload.get("target"), payload.get("track_ids"))
+        return jsonify(catalog.view())
+
+    @app.post("/api/catalog/<identity>/link")
+    def link_source_release(identity):
+        payload = request.get_json()
+        if not isinstance(payload, dict):
+            raise ValueError("Expected a target release.")
+        catalog.link_release(identity, payload.get("target"))
+        return jsonify(catalog.view())
+
     @app.get("/api/review")
     def review():
         return jsonify(current_view())

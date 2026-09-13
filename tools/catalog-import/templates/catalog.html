@@ -12,6 +12,14 @@
     <h1>Find the next release.</h1>
     <p>Include only identifiable official releases. Mark broad source labels as groupings; their tracks remain available for matching to real releases. Missing index entries are retained, not deleted.</p>
     <section class="panel"><button class="button primary" id="scan" type="button">Scan Kivo index</button><p id="scan-status" role="status"></p><label>Filter candidates<input id="filter" type="search" placeholder="Album title or decision"></label></section>
+    <section class="panel"><details><summary>Create an identified release for grouped tracks</summary>
+      <form id="create-release"><label>Official release title<input name="title" maxlength="255" required></label>
+        <label>Category<input name="category" list="categories" maxlength="255" required></label><datalist id="categories"><option>OST</option><option>青春あんさんぶる</option><option>絆ダイアローグ</option></datalist>
+        <label>Release evidence URL (optional)<input name="reference" type="url" placeholder="https://…"></label>
+        <label><input name="official" type="checkbox" required> I have identified this as an official release, not just a source grouping.</label>
+        <button class="button primary" type="submit">Save release draft</button>
+      </form><p class="helper">Create the release once, then inspect a source grouping and map selected tracks into it. This does not include or publish the release.</p>
+    </details></section>
     <p id="notice" role="status" hidden></p><div id="candidates"></div>
   </div></main>
 </body>

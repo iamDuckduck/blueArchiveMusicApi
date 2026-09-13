@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import uuid
 from unittest.mock import Mock, patch
 
 from catalog import Catalog, fetch_index
@@ -140,6 +141,85 @@ class DiscoveryTests(unittest.TestCase):
         self.catalog.decide(identity, "skipped")
         restarted = Catalog(self.temp.name)
         self.assertEqual(restarted.open_review(identity).read()["album"]["decision"], "skipped")
+
+    def test_grouped_tracks_can_map_to_two_official_appearances_without_reclassifying_source(self):
+        self.catalog.merge([track(1, "游戏内曲目"), track(2, "游戏内曲目")])
+        source = next(iter(self.catalog.read()["candidates"]))
+        targets = [str(uuid.uuid4()), str(uuid.uuid4())]
+        for identity in targets:
+            fields = {"id":identity, "title":"Official OST " + identity[:4], "category":"OST", "official":True}
+            self.catalog.create_release(fields)
+            self.catalog.create_release(fields)  # Lost response retry does not create another release.
+            self.catalog.map_tracks(source, identity, [1])
+            self.catalog.map_tracks(source, identity, [1])
+            saved = self.catalog.open_review(identity).view()
+            self.assertEqual(len(saved["tracks"]), 1)
+            self.assertEqual(saved["tracks"][0]["source_id"], 1)
+            self.assertFalse(saved["tracks"][0]["included"])
+            self.assertFalse(saved["tracks"][0]["publish_selected"])
+        self.assertEqual(len(self.catalog.read()["candidates"]), 3)
+        self.assertEqual(self.catalog.read()["candidates"][source]["kind"], "source_grouping")
+        self.catalog.merge([track(1, "游戏内曲目", "Changed source"), track(2, "游戏内曲目")])
+        changed = self.catalog.open_review(targets[0]).view()["tracks"][0]
+        self.assertEqual(changed["fields"]["title"], "Music")
+        self.assertEqual(changed["pending_index"]["title"], "Changed source")
+
+    def test_renamed_label_links_into_existing_review_without_changing_ids_or_edits(self):
+        self.catalog.merge([track(1, "Old label")])
+        target = next(iter(self.catalog.read()["candidates"]))
+        saved = self.catalog.open_review(target)
+        saved.save_edits({"album":{"title":"Reviewed official title"}})
+        saved.update(lambda s: s["publication"].update(album={"albumId":42}))
+        self.catalog.merge([track(1, "New label")])
+        source = next(i for i in self.catalog.read()["candidates"] if i != target)
+        self.catalog.link_release(source, target)
+        self.catalog.merge([track(1, "New label")])
+        result = self.catalog.open_review(target).view()
+        self.assertEqual(result["album"]["id"], target)
+        self.assertEqual(result["album"]["fields"]["title"], "Reviewed official title")
+        self.assertEqual(result["publication"]["album"]["albumId"], 42)
+        self.assertEqual(len(result["tracks"]), 1)
+        self.assertEqual(self.catalog.read()["candidates"][source]["redirect_to"], target)
+        with self.assertRaises(ValueError):
+            self.catalog.decide(source, "included")
+        with self.assertRaises(ValueError):
+            self.catalog.open_review(source)
+
+    def test_missing_mapped_and_whole_release_records_warn_without_losing_review(self):
+        self.catalog.merge([track(1, "Source"), track(2, "Other")])
+        source, other = self.catalog.read()["candidates"]
+        self.catalog.map_tracks(source, other, [1])
+        for identity in [source, other]:
+            self.catalog.open_review(identity).save_edits({"tracks":{"1":{"notes":"Keep correction"}}})
+        self.catalog.merge([track(2, "Other")])
+        for identity in [source, other]:
+            saved = self.catalog.open_review(identity).view()
+            row = next(t for t in saved["tracks"] if t["source_id"] == 1)
+            self.assertTrue(row["missing_index"])
+            self.assertEqual(row["fields"]["notes"], "Keep correction")
+        self.catalog.merge([track(1, "Source"), track(2, "Other")])
+        returned = self.catalog.open_review(other).view()
+        self.assertFalse(next(t for t in returned["tracks"] if t["source_id"] == 1).get("missing_index"))
+
+    def test_invalid_mapping_targets_are_client_errors(self):
+        app = create_app(self.temp.name)
+        catalog = app.extensions["catalog"]
+        catalog.merge([track(1)])
+        identity = next(iter(catalog.read()["candidates"]))
+        for action in ["map", "link"]:
+            result = app.test_client().post(f"/api/catalog/{identity}/{action}", json={"target":[], "track_ids":[1]})
+            self.assertEqual(result.status_code, 400)
+
+    def test_mapping_rejects_unknown_tracks_and_linking_never_discards_an_existing_review(self):
+        self.catalog.merge([track(1, "A"), track(2, "B")])
+        a, b = self.catalog.read()["candidates"]
+        with self.assertRaises(ValueError):
+            self.catalog.map_tracks(a, b, [99])
+        review = self.catalog.open_review(a)
+        review.save_edits({"tracks":{"1":{"notes":"Keep this"}}})
+        with self.assertRaises(ValueError):
+            self.catalog.link_release(a, b)
+        self.assertEqual(review.view()["tracks"][0]["fields"]["notes"], "Keep this")
 
 
 if __name__ == "__main__":

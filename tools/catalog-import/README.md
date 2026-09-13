@@ -164,3 +164,7 @@ publish music. For a manual isolation check, open two candidates in separate tab
 edit and save one title, and confirm the other review is unchanged. Reload and
 restart the tool to check persistence. New tracks must be selected deliberately;
 they are not automatically included for preparation or selected for publication.
+
+## Map release appearances
+
+Create an identified official release and map selected source tracks into it. The same recording can have separate album appearances. Link renamed source labels to existing releases without discarding saved reviews.

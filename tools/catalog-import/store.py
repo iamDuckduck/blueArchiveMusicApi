@@ -1,0 +1,7 @@
+"""Timestamp shared by saved source evidence; review storage arrives later."""
+from datetime import datetime, timezone
+
+
+def now():
+    return datetime.now(timezone.utc).isoformat()
+

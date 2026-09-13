@@ -1,11 +1,28 @@
-# Local catalog import
+# Local catalog review
 
-Requires Python 3.11+. Install dependencies with `python -m pip install -r requirements.txt`.
+Requires Python 3.11+, FFmpeg and FFprobe on PATH. From this directory:
 
-This chapter reads Kivo details for supplied track IDs and suggests explicitly supported credits. GameKee failures remain visible. The Veritas fixtures demonstrate source interpretation. Album scanning, media preparation, browser review and publication arrive in later chapters.
+```powershell
+python -m pip install -r requirements.txt
+python app.py
+```
 
-Run `python -m unittest discover -s tests -v` from this directory.
+Open http://127.0.0.1:8765. Load Kivo details, include the Veritas album,
+prepare its audio and artwork, review the source evidence and edit the credits.
+Save changes to keep your corrections across restarts. The page previews the
+validated audio and keeps the spoken drama reference excluded.
 
-## Local media preparation
+Fetching reads source metadata and file URLs. Preparation downloads and validates
+those files, reads embedded tags and creates 400/800 px cover copies. GameKee
+requests can fail; the saved error and manual reference remain available.
 
-FFmpeg/FFprobe must be on PATH. `media.py` downloads files from reviewed Kivo URLs, validates the full audio stream, reads embedded tags and retains original covers plus 400/800 px copies. Valid cached files are reused. The browser workflow is introduced next.
+The ignored `data/` directory contains SQLite reviews and prepared media.
+Stop the tool and back up that whole directory before moving your saved work.
+Use `--data-dir` for a separate review directory and `--port` for another port.
+
+Run `python -m unittest discover -s tests -v` for the source, preparation,
+persistence and local browser-API tests. Fixtures and temporary files keep these
+tests independent from live source services.
+
+This chapter demonstrates one local sample review. Later chapters add backend
+publication, general discovery and review of incoming changes.

@@ -1,0 +1,25 @@
+# Test classpath only: never an everyday development environment.
+spring:
+  docker:
+    compose:
+      enabled: false
+  datasource:
+    url: jdbc:h2:mem:context-test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop
+  flyway:
+    enabled: false
+
+blueArchive:
+  r2:
+    endpoint: http://127.0.0.1:9
+    accessKey: test-only
+    secretKey: test-only
+    bucket: unused-test-bucket
+  redis:
+    url: redis://127.0.0.1:1

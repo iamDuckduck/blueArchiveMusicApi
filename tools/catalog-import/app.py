@@ -2,21 +2,29 @@
 
 import argparse
 import logging
+import os
 from pathlib import Path
 
 from flask import Flask, abort, jsonify, render_template, request, send_file
 
 from service import ReviewService
 from store import Store, find_track
+from publisher import Publisher
 
 
-def create_app(data_dir=None):
+def create_app(data_dir=None, backend_url="http://127.0.0.1:8080", api_key=None):
     app = Flask(__name__)
     app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024
     store = Store(data_dir or Path(__file__).parent / "data")
-    service = ReviewService(store)
+    publisher = Publisher(store, backend_url, api_key) if api_key else None
+    service = ReviewService(store, publisher)
     app.extensions["review_store"] = store
     app.extensions["review_service"] = service
+
+    def current_view():
+        state = store.view()
+        state["publication"]["enabled"] = publisher is not None
+        return state
 
     @app.before_request
     def local_requests_only():
@@ -47,7 +55,7 @@ def create_app(data_dir=None):
 
     @app.get("/api/review")
     def review():
-        return jsonify(store.view())
+        return jsonify(current_view())
 
     @app.put("/api/review")
     def save():
@@ -55,7 +63,7 @@ def create_app(data_dir=None):
         if not isinstance(payload, dict):
             raise ValueError("Expected review fields.")
         store.save_edits(payload)
-        return jsonify(store.view())
+        return jsonify(current_view())
 
     @app.post("/api/decision")
     def decide():
@@ -66,7 +74,7 @@ def create_app(data_dir=None):
         if decision not in {"review", "included", "skipped"}:
             raise ValueError("Choose review, included or skipped.")
         store.update(lambda s: s["album"].update(decision=decision))
-        return jsonify(store.view())
+        return jsonify(current_view())
 
     @app.post("/api/tracks/<track_id>/inclusion")
     def include_track(track_id):
@@ -82,12 +90,30 @@ def create_app(data_dir=None):
         if included and (track["suggestions"] | track["edits"])["kind"] == "drama":
             raise ValueError("Spoken drama is excluded. Correct its music type first if it was misclassified.")
         store.update(lambda s: find_track(s, track_id).update(included=included))
-        return jsonify(store.view())
+        return jsonify(current_view())
+
+    @app.post("/api/tracks/<track_id>/publication")
+    def select_publication(track_id):
+        if store.read()["job"].get("running"):
+            raise ValueError("Wait for the local job to finish before changing publication selection.")
+        track = next((t for t in store.read()["tracks"] if t["id"] == track_id), None)
+        if track is None or track["source_id"] is None:
+            abort(404)
+        payload = request.get_json()
+        selected = payload.get("selected") if isinstance(payload, dict) else None
+        if type(selected) is not bool:
+            raise ValueError("Expected a publication selection.")
+        if selected and (not track["included"] or track["media"]["status"] != "ready"
+                         or (track["suggestions"] | track["edits"])["kind"] == "drama"):
+            raise ValueError("Select only included, prepared music for publication.")
+        store.update(lambda s: find_track(s, track_id).update(publish_selected=selected))
+        return jsonify(current_view())
+
 
     @app.post("/api/jobs/<action>")
     def job(action):
         service.start(action)
-        return jsonify(store.view()), 202
+        return jsonify(current_view()), 202
 
     def local_media(relative):
         target = (store.directory / relative).resolve()
@@ -116,9 +142,11 @@ def create_app(data_dir=None):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Local album review. No production publication is connected.")
+    parser = argparse.ArgumentParser(description="Local album review with explicit publication to the configured backend. Verify the destination before publishing.")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--data-dir", type=Path, help="Optional location for saved reviews and media")
+    parser.add_argument("--backend-url", default=os.getenv("CATALOG_IMPORT_BACKEND_URL", "http://127.0.0.1:8080"))
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
-    create_app(args.data_dir).run(host="127.0.0.1", port=args.port, debug=False, use_reloader=False, threaded=True)
+    create_app(args.data_dir, args.backend_url, os.getenv("CATALOG_IMPORT_API_KEY")).run(
+        host="127.0.0.1", port=args.port, debug=False, use_reloader=False, threaded=True)

@@ -24,9 +24,8 @@ Run `python -m unittest discover -s tests -v` for the source, preparation,
 persistence and local browser-API tests. Fixtures and temporary files keep these
 tests independent from live source services.
 
-The browser tool still demonstrates one local sample review. Backend publication
-endpoints are available below; the tool's Publish button, general discovery and
-review of incoming changes are later chapters.
+The browser tool reviews and publishes one local sample release. General discovery
+and review of incoming changes remain later chapters.
 
 ## Backend development and media storage
 
@@ -84,8 +83,8 @@ object is retained in the development bucket. The public response did not includ
 `Access-Control-Allow-Origin` for `http://localhost:5173`; browser CORS behavior
 and full app playback remain unverified. No database or production writes were made.
 
-Storage was introduced in chapter 5; the import API below is chapter 6. The
-review tool's Publish button is still pending (chapter 7).
+Storage was introduced in chapter 5, the import API in chapter 6, and the
+review tool's Publish button in chapter 7.
 The later frontend media resolver needs `VITE_PUBLIC_MEDIA_BASE_URL` pointing to
 the development bucket's public URL, not the authenticated R2 upload endpoint.
 Never expose R2 credentials in frontend variables. Full publish/playback and
@@ -113,3 +112,27 @@ repeated publication, public album metadata, stable IDs/credits/play counts and
 unchanged stored bytes. It does not call real R2, PostgreSQL or a browser, and it
 does not reintroduce the removed local-media route. Concurrent metadata-edit
 protection and full publish-to-player verification are still later review work.
+## Publish selected reviewed tracks
+
+Start the backend with its normal development settings above, including
+`ADMIN_API_KEY`. Load these variables into the Python process (it does not
+automatically read a `.env` file):
+
+```dotenv
+CATALOG_IMPORT_BACKEND_URL=http://127.0.0.1:8080
+CATALOG_IMPORT_API_KEY=<same value as backend ADMIN_API_KEY>
+```
+
+Start `python app.py`; `--backend-url` can override the destination. Without an
+API key publication is disabled. The backend, not Python, selects the database
+and R2 bucket. Confirm the URL points to your development backend before publishing.
+
+After preparation, review publication selections and click Publish reviewed album.
+The tool saves edits, publishes album metadata/covers first, then selected track
+metadata/audio. Missing tracks can remain visible and unselected. Each successful
+response is saved locally. If a later track fails, earlier successes remain;
+retrying sends the same identities again so the API can reuse records and media.
+Fetching, preparation and saving edits alone do not publish anything.
+
+These tests mock the HTTP backend. Full PostgreSQL/R2/browser verification of this
+reviewed flow remains separate; this chapter does not prove live app playback.

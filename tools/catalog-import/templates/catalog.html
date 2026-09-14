@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Album discovery · Blue Archive Music</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='review.css') }}">
+  <script src="{{ url_for('static', filename='catalog.js') }}" defer></script>
+</head>
+<body>
+  <aside class="sidebar"><a class="brand" href="/">Blue Archive Music</a><a class="nav-item active" href="/catalog">Album discovery</a><a class="nav-item" href="/">Saved Veritas review</a><div class="sidebar-note">Local workspace. Scanning does not prepare or publish music.</div></aside>
+  <main><header class="topbar">Catalog / Album discovery</header><div class="page-content">
+    <h1>Find the next release.</h1>
+    <p>Include only identifiable official releases. Mark broad source labels as groupings; their tracks remain available for matching to real releases. Missing index entries are retained, not deleted.</p>
+    <section class="panel"><button class="button primary" id="scan" type="button">Scan Kivo index</button><p id="scan-status" role="status"></p><label>Filter candidates<input id="filter" type="search" placeholder="Album title or decision"></label></section>
+    <p id="notice" role="status" hidden></p><div id="candidates"></div>
+  </div></main>
+</body>
+</html>

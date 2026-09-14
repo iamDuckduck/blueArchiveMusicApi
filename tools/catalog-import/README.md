@@ -24,8 +24,9 @@ Run `python -m unittest discover -s tests -v` for the source, preparation,
 persistence and local browser-API tests. Fixtures and temporary files keep these
 tests independent from live source services.
 
-The browser tool reviews and publishes one local sample release. General discovery
-and review of incoming changes remain later chapters.
+The browser tool reviews and publishes one local sample release and can discover
+other release candidates. Separate release reviews and incoming-change review
+remain later chapters.
 
 ## Backend development and media storage
 
@@ -136,3 +137,20 @@ Fetching, preparation and saving edits alone do not publish anything.
 
 These tests mock the HTTP backend. Full PostgreSQL/R2/browser verification of this
 reviewed flow remains separate; this chapter does not prove live app playback.
+## Discover candidates
+
+Open `/catalog` and scan Kivo to read every index page. Include, skip or mark candidates as source groupings. Failed or inconsistent scans retain the previous complete scan. This chapter saves candidate decisions; opening separate reviews follows next.
+
+For a discovery-only manual check, run these commands from this tool directory:
+
+```powershell
+Remove-Item Env:CATALOG_IMPORT_API_KEY -ErrorAction SilentlyContinue
+python app.py --port 8766 --data-dir ../../target/catalog-discovery-review
+```
+
+Open `http://127.0.0.1:8766/catalog`, scan, inspect a candidate's source records,
+and save an include/skip/review decision. Reload the page, then stop/restart the
+tool and confirm the choice remains. This directory is separate from your saved
+Veritas review. Scanning needs internet access to Kivo, but no Spring backend,
+PostgreSQL, Redis or R2. With the Python API key unset, publication is disabled.
+This chapter cannot yet open independent reviews for newly discovered releases.

@@ -10,6 +10,7 @@ from flask import Flask, abort, jsonify, render_template, request, send_file
 from service import ReviewService
 from store import Store, find_track
 from publisher import Publisher
+from catalog import Catalog
 
 
 def create_app(data_dir=None, backend_url="http://127.0.0.1:8080", api_key=None):
@@ -18,6 +19,8 @@ def create_app(data_dir=None, backend_url="http://127.0.0.1:8080", api_key=None)
     store = Store(data_dir or Path(__file__).parent / "data")
     publisher = Publisher(store, backend_url, api_key) if api_key else None
     service = ReviewService(store, publisher)
+    catalog = Catalog(store.directory, service.job_lock)
+    app.extensions["catalog"] = catalog
     app.extensions["review_store"] = store
     app.extensions["review_service"] = service
 
@@ -52,6 +55,42 @@ def create_app(data_dir=None, backend_url="http://127.0.0.1:8080", api_key=None)
     @app.get("/")
     def index():
         return render_template("index.html")
+
+    @app.get("/catalog")
+    def catalog_page():
+        return render_template("catalog.html")
+
+
+    @app.get("/api/catalog")
+    def candidates():
+        return jsonify(catalog.view())
+
+
+    @app.get("/api/catalog/<identity>")
+    def candidate(identity):
+        item = catalog.read()["candidates"].get(identity)
+        if item is None:
+            abort(404)
+        return jsonify(item)
+
+
+    @app.post("/api/catalog/scan")
+    def scan_catalog():
+        catalog.start_scan()
+        return jsonify(catalog.view()), 202
+
+
+    @app.post("/api/catalog/<identity>/decision")
+    def candidate_decision(identity):
+        payload = request.get_json()
+        if not isinstance(payload, dict):
+            raise ValueError("Expected a candidate decision.")
+        catalog.decide(identity, payload.get("decision"))
+        if identity == store.read()["album"]["id"]:
+            decision = payload["decision"]
+            store.update(lambda s: s["album"].update(decision="skipped" if decision == "grouping" else decision))
+        return jsonify(catalog.view())
+
 
     @app.get("/api/review")
     def review():

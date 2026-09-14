@@ -24,8 +24,9 @@ Run `python -m unittest discover -s tests -v` for the source, preparation,
 persistence and local browser-API tests. Fixtures and temporary files keep these
 tests independent from live source services.
 
-This chapter demonstrates one local sample review. Later chapters add backend
-publication, general discovery and review of incoming changes.
+The browser tool still demonstrates one local sample review. Backend publication
+endpoints are available below; the tool's Publish button, general discovery and
+review of incoming changes are later chapters.
 
 ## Backend development and media storage
 
@@ -83,8 +84,32 @@ object is retained in the development bucket. The public response did not includ
 `Access-Control-Allow-Origin` for `http://localhost:5173`; browser CORS behavior
 and full app playback remain unverified. No database or production writes were made.
 
-This chapter adds storage, not the import API or Publish button (chapters 6–7).
+Storage was introduced in chapter 5; the import API below is chapter 6. The
+review tool's Publish button is still pending (chapter 7).
 The later frontend media resolver needs `VITE_PUBLIC_MEDIA_BASE_URL` pointing to
 the development bucket's public URL, not the authenticated R2 upload endpoint.
 Never expose R2 credentials in frontend variables. Full publish/playback and
 PostgreSQL verification must be repeated when those later chapters are reviewed.
+
+## Reviewed import API (chapter 6)
+
+Set `ADMIN_API_KEY` in the backend environment. Calls require that value in the
+`X-Admin-Api-Key` header. Publish the album before its tracks:
+
+- `PUT /admin/catalog-import/{source}/albums/{sourceAlbumId}` accepts multipart
+  parts `metadata` (JSON), `coverOriginal`, `cover400` and `cover800` (files).
+- `PUT /admin/catalog-import/{source}/albums/{sourceAlbumId}/tracks/{sourceTrackId}`
+  accepts multipart parts `metadata` (JSON) and `audio` (file).
+
+Source identities select existing records independently of titles. A repeat
+request updates the same record, reuses unchanged stored media and retains an
+existing play count. Responses include `albumId`, `songId` (null for an album),
+`created` and `status`. Shared artists are matched by reviewed display name and
+linked by role; character/CV pairs currently become combined display names.
+
+The automated API check uses test-only H2 and temporary files, with the Redis
+scheduler mocked. It verifies authentication, album-before-track validation,
+repeated publication, public album metadata, stable IDs/credits/play counts and
+unchanged stored bytes. It does not call real R2, PostgreSQL or a browser, and it
+does not reintroduce the removed local-media route. Concurrent metadata-edit
+protection and full publish-to-player verification are still later review work.

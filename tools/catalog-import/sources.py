@@ -113,12 +113,15 @@ def content_text(value):
     return ""
 
 
-def fetch_gamekee():
-    result = {"url": GAMEKEE_PAGE, "checked_at": now(), "status": "failed", "text": ""}
+def fetch_gamekee(page_url=GAMEKEE_PAGE):
+    result = {"url": page_url, "checked_at": now(), "status": "failed", "text": ""}
     try:
-        response = requests.get("https://www.gamekee.com/v1/content/detail/691994",
+        match = re.fullmatch(r"https://www\.gamekee\.com/ba/(\d+)\.html", page_url)
+        if not match:
+            raise ValueError("Choose this release's GameKee reference (https://www.gamekee.com/ba/<id>.html). No default match is assumed.")
+        response = requests.get("https://www.gamekee.com/v1/content/detail/" + match.group(1),
                                 headers=HEADERS | {"game-alias": "ba", "Lang": "zh-cn", "X-Requested-With": "XMLHttpRequest"},
-                                timeout=(10, 20))
+                                timeout=(10, 20), allow_redirects=False)
         response.raise_for_status()
         payload = response.json()
         if payload.get("code") != 0 or not isinstance(payload.get("data"), dict):

@@ -5,9 +5,10 @@ let polling = false;
 const $ = (selector, root = document) => root.querySelector(selector);
 const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"})[c]);
 const statusLabels = {pending:"Not prepared", ready:"Ready", failed:"Needs attention", running:"Preparing", excluded:"Excluded", review:"Needs review", included:"Included", skipped:"Skipped"};
+const reviewPrefix = document.body.dataset.reviewPrefix || "";
 
 async function api(path, method = "GET", body) {
-  const response = await fetch(path, {method, headers: body === undefined ? {} : {"Content-Type":"application/json"}, body: body === undefined ? undefined : JSON.stringify(body)});
+  const response = await fetch(reviewPrefix + path, {method, headers: body === undefined ? {} : {"Content-Type":"application/json"}, body: body === undefined ? undefined : JSON.stringify(body)});
   const result = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(result.error || `Request failed (${response.status}).`);
   return result;
@@ -113,7 +114,10 @@ function render(state) {
   const album = state.album;
   setBadge($("#album-status"), album.decision);
   $("#album-heading").textContent = album.fields.title;
+  $(".album-summary").textContent = `${state.tracks.length} known source / reference tracks`;
   $("#release-link").href = state.release_reference;
+  $("#release-link").hidden = !state.release_reference;
+  $("#release-note").hidden = !state.release_reference;
   for (const input of document.querySelectorAll("[data-album-field]")) {
     if (!(input.dataset.albumField in pending.album)) input.value = album.fields[input.dataset.albumField] ?? "";
   }
@@ -137,7 +141,7 @@ function render(state) {
     if ($("#cover-art").dataset.key !== coverKey) {
       const image = document.createElement("img");
       image.src = cover.preview_url + "?v=" + coverKey;
-      image.alt = "Veritas album cover";
+      image.alt = album.fields.title;
       $("#cover-art").replaceChildren(image);
       $("#cover-art").dataset.key = coverKey;
     }
@@ -183,6 +187,7 @@ function render(state) {
       audioArea.replaceChildren(hint);
     }
     const warnings = [];
+    if (track.index_warning) warnings.push(track.index_warning);
     if (track.source_error) warnings.push("Kivo: " + track.source_error + (track.source ? " Saved source information is retained." : ""));
     if (track.media.error) warnings.push("Preparation: " + track.media.error);
     if (!track.fields.composer.length) warnings.push("Composer not filled yet. File tags may help after preparation, or you can add it manually.");
@@ -190,13 +195,14 @@ function render(state) {
     const container = $(".track-warnings", card);
     container.replaceChildren(...warnings.map(message => { const p = document.createElement("p"); p.className = "warning-text"; p.textContent = message; return p; }));
     $(".kivo-link", card).href = `https://api.kivo.wiki/api/v1/musics/${track.source_id}`;
-    $(".kivo-evidence", card).textContent = track.source ? JSON.stringify(track.source, null, 2) : "Load source information to see the original record.";
+    $(".kivo-evidence", card).textContent = JSON.stringify({detail:track.source, index:track.index, incomingIndex:track.pending_index}, null, 2);
     $(".tag-evidence", card).textContent = Object.keys(track.tags).length ? JSON.stringify(track.tags, null, 2) : "Audio tags are read after the file is downloaded and validated.";
   }
   const g = state.gamekee;
   setBadge($("#gamekee-status"), g.status, {pending:"Not checked", ready:"Available", failed:"Manual reference available"}[g.status]);
   $("#gamekee-message").textContent = g.status === "failed" ? "The automatic check could not read this page. You can open it and enter the details manually. " + g.error : g.status === "ready" ? "Source text is saved below. Compare it with the track credits before making corrections." : "The matching album is checked when you load sources.";
   $("#gamekee-link").href = g.url;
+  $("#gamekee-link").hidden = !g.url;
   $("#retry-gamekee").disabled = busy;
   $("#gamekee-evidence").hidden = !(g.text || g.cached_text);
   $("#gamekee-text").textContent = g.text || (g.cached_text ? "Previously saved content (latest fetch failed):\n\n" + g.cached_text : "");

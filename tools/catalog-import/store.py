@@ -56,7 +56,7 @@ def initial_review():
 
 
 class Store:
-    def __init__(self, directory):
+    def __init__(self, directory, initial=None):
         self.directory = Path(directory).resolve()
         self.directory.mkdir(parents=True, exist_ok=True)
         self.database = self.directory / "reviews.sqlite3"
@@ -64,7 +64,7 @@ class Store:
         with self.connect() as db:
             db.execute("CREATE TABLE IF NOT EXISTS review (id INTEGER PRIMARY KEY, payload TEXT NOT NULL)")
             db.execute("INSERT OR IGNORE INTO review VALUES (1, ?)",
-                       (json.dumps(initial_review(), ensure_ascii=False),))
+                       (json.dumps(initial if initial is not None else initial_review(), ensure_ascii=False),))
         self.update(self._recover)
 
     @contextmanager
@@ -79,12 +79,12 @@ class Store:
     @staticmethod
     def _recover(state):
         state.setdefault("publication", {"status": "pending", "message": "Not published."})
+        state["album"]["suggestions"].setdefault("gamekee_url", state["gamekee"].get("url", ""))
         if state["job"].get("running"):
             state["job"] = {"running": False, "message": "Preparation was interrupted. Retry to continue."}
         for item in [state["album"]["cover"], *(t["media"] for t in state["tracks"])]:
             if item["status"] == "running":
                 item.update(status="failed", error="Interrupted. Retry to continue.")
-
         for track in state["tracks"]:
             track.setdefault("publish_selected", track["included"] and track["source_id"] is not None)
 
@@ -115,7 +115,7 @@ class Store:
         return state
 
     def save_edits(self, payload):
-        album_fields = {"title", "category", "release_date", "notes"}
+        album_fields = {"title", "category", "release_date", "notes", "gamekee_url"}
         track_fields = {"title", "position", "disc", "kind", "group", "performers", "composer", "notes"}
 
         def validate(values, allowed):

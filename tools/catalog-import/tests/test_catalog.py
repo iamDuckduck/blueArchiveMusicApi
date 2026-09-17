@@ -97,8 +97,49 @@ class DiscoveryTests(unittest.TestCase):
         finally:
             service.job_lock.release()
 
+    def test_multiple_reviews_are_isolated_and_new_tracks_are_not_auto_selected(self):
+        app = create_app(self.temp.name)
+        catalog = app.extensions["catalog"]
+        catalog.merge([track(81, "Release A"), track(82, "Release B")])
+        identities = list(catalog.read()["candidates"])
+        client = app.test_client()
+        for identity in identities:
+            self.assertEqual(client.get(f"/albums/{identity}/").status_code, 200)
+        a, b = identities
+        self.assertEqual(client.put(f"/albums/{a}/api/review", json={"album":{"title":"My correction"}}).status_code, 200)
+        self.assertEqual(client.get(f"/albums/{a}/api/review").json["album"]["fields"]["title"], "My correction")
+        other = client.get(f"/albums/{b}/api/review").json
+        self.assertEqual(other["album"]["fields"]["title"], "Release B")
+        self.assertFalse(other["tracks"][0]["included"])
+        self.assertFalse(other["tracks"][0]["publish_selected"])
+        self.assertEqual(other["album"]["fields"]["gamekee_url"], "")
+        catalog.merge([track(81, "Release A", "Source edit"), track(83, "Release A"), track(82, "Release B")])
+        client.get(f"/albums/{a}/")
+        saved = client.get(f"/albums/{a}/api/review").json
+        self.assertEqual(saved["album"]["fields"]["title"], "My correction")
+        self.assertEqual(saved["tracks"][0]["fields"]["title"], "Music")
+        self.assertEqual(saved["tracks"][0]["pending_index"]["title"], "Source edit")
+        self.assertFalse(saved["tracks"][1]["included"])
+        self.assertEqual(len(saved["tracks"]), 2)
+        restarted = create_app(self.temp.name).test_client()
+        self.assertEqual(restarted.get(f"/albums/{a}/api/review").json["album"]["fields"]["title"], "My correction")
 
+    def test_explicit_drama_is_excluded_without_a_duration_heuristic(self):
+        self.catalog.merge([track(1, title="ボイスドラマ bonus"), track(2, title="Music (Instrumental Ver.)")])
+        identity = next(iter(self.catalog.read()["candidates"]))
+        review = self.catalog.open_review(identity).view()
+        self.assertEqual(review["tracks"][0]["fields"]["kind"], "drama")
+        self.assertFalse(review["tracks"][0]["included"])
+        self.assertEqual(review["tracks"][1]["fields"]["kind"], "instrumental")
 
+    def test_saved_discovery_decision_applies_when_reopening_an_existing_review(self):
+        self.catalog.merge([track(1)])
+        identity = next(iter(self.catalog.read()["candidates"]))
+        self.catalog.decide(identity, "included")
+        self.assertEqual(self.catalog.open_review(identity).read()["album"]["decision"], "included")
+        self.catalog.decide(identity, "skipped")
+        restarted = Catalog(self.temp.name)
+        self.assertEqual(restarted.open_review(identity).read()["album"]["decision"], "skipped")
 
 
 if __name__ == "__main__":

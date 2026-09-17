@@ -17,6 +17,14 @@ from store import Store, initial_review, now
 KIVO_INDEX = "https://api.kivo.wiki/api/v1/musics/"
 
 
+def draft_track(record):
+    title = record["title"]
+    kind = "drama" if re.search(r"ボイスドラマ|广播剧|廣播劇|voice drama|spoken drama", title, re.I) else "instrumental" if re.search(r"instrumental|off vocal", title, re.I) else "unsure"
+    return {"id": str(record["id"]), "source_id": record["id"], "included": False, "publish_selected": False,
+            "suggestions": {"title": record["title"], "position": None, "disc": None,
+                            "kind": kind, "group": [], "performers": [], "composer": [], "notes": ""},
+            "edits": {}, "source": None, "source_status": "pending", "source_error": "",
+            "source_fetched_at": None, "media": {"status": "pending"}, "tags": {}, "index": record}
 
 
 def fetch_index(progress=lambda message: None):
@@ -161,7 +169,57 @@ class Catalog:
             candidate.update(decision=decision, reviewed_at=now())
         return self.update(mutate)
 
+    def open_review(self, identity):
+        candidate = self.read()["candidates"].get(identity)
+        if candidate is None:
+            raise ValueError("Unknown candidate.")
+        if candidate["kind"] != "release_candidate" or candidate["decision"] == "grouping":
+            raise ValueError("This is a source grouping or unidentified release, not an approved album candidate.")
+        label = candidate["source_album"]
+        category = next((name for name in ["青春あんさんぶる", "絆ダイアローグ", "OST"] if name in label), "")
+        initial = {"album": {"id": identity, "decision": candidate["decision"],
+                              "suggestions": {"title": label, "category": category, "release_date": "", "notes": ""},
+                              "edits": {}, "cover": {"status": "pending"}},
+                   "tracks": [draft_track(record) for record in candidate["records"]],
+                   "gamekee": {"status": "pending", "url": ""}, "release_reference": "",
+                   "publication": {"status": "pending", "message": "Not published."},
+                   "job": {"running": False, "message": "Select music tracks, then load source details."}, "saved_at": now()}
+        directory = self.directory if identity == "veritas-vol-2" else self.directory / "releases" / identity
+        store = Store(directory, initial=initial)
+        store.update(lambda s: s["album"].update(decision=candidate["decision"]))
+        self.sync_review(store, candidate)
+        return store
 
+    def sync_review(self, store, candidate=None):
+        saved = store.read()
+        candidate = candidate or self.read()["candidates"].get(saved["album"]["id"])
+        if candidate is None or saved["job"].get("running"):
+            return
+        if saved.get("last_index") == candidate["records"]:
+            return
+
+        def mutate(state):
+            tracks = {t["source_id"]: t for t in state["tracks"] if t["source_id"] is not None}
+            incoming = {r["id"]: r for r in candidate["records"]}
+            for identity, record in incoming.items():
+                if state["album"]["id"] == "veritas-vol-2" and identity == 257:
+                    reference = next((t for t in state["tracks"] if t["id"] == "drama"), None)
+                    if reference is not None:
+                        reference["index"] = record
+                        continue
+                if identity not in tracks:
+                    state["tracks"].append(draft_track(record))
+                elif "index" not in tracks[identity]:
+                    tracks[identity]["index"] = record
+                elif tracks[identity]["index"] != record:
+                    track = tracks[identity]
+                    track["pending_index"] = record
+                    track["index_warning"] = "Source index changed. Compare the incoming record and explicitly reload details; saved corrections are retained."
+            for identity, track in tracks.items():
+                if identity not in incoming:
+                    track["index_warning"] = "Not in the latest source index. Saved track, files and publication are retained."
+            state["last_index"] = candidate["records"]
+        store.update(mutate)
 
     def start_scan(self):
         if not self.job_lock.acquire(blocking=False):

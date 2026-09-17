@@ -56,6 +56,8 @@ class ReviewService:
         for track in self.store.read()["tracks"]:
             if track["source_id"] is None or (only_missing and track["source"]):
                 continue
+            if only_missing and not track["included"]:
+                continue
             track_id = track["source_id"]
             self.message(f"Reading Kivo track {track_id}…")
             try:
@@ -63,10 +65,14 @@ class ReviewService:
 
                 def save(state):
                     row = find_track(state, track_id)
+                    if row["source"] and row["source"] != data:
+                        row.setdefault("source_history", []).append({"fetched_at":row.get("source_fetched_at"), "raw":row["source"]})
                     row.update(source=data, source_status="ready", source_error="", source_fetched_at=now())
                     row["suggestions"].update(sources.suggestions_from_kivo(data))
-                    if track_id == 255 and data.get("album"):
-                        state["album"]["suggestions"]["title"] = data["album"]
+                    if row.get("pending_index"):
+                        row["index"] = row.pop("pending_index")
+                        row.pop("index_warning", None)
+                    # The selected official release is an operator decision, not a detail-record label.
 
                 self.store.update(save)
             except Exception as error:
@@ -74,12 +80,15 @@ class ReviewService:
                 self.store.update(lambda s: find_track(s, track_id).update(source_status="failed", source_error=reason))
 
     def fetch_gamekee(self, force=False):
-        previous = self.store.read()["gamekee"]
-        if previous["status"] != "pending" and not force:
+        state = self.store.view()
+        previous = state["gamekee"]
+        page_url = state["album"]["fields"]["gamekee_url"]
+        if not force and previous["status"] != "pending" and previous.get("url") == page_url:
             return
         self.message("Checking the matching GameKee album…")
-        result = sources.fetch_gamekee()
-        saved_text = previous.get("text") or previous.get("cached_text")
+        result = sources.fetch_gamekee(page_url)
+        result["url"] = page_url
+        saved_text = (previous.get("text") or previous.get("cached_text")) if previous.get("url", page_url) == page_url else None
         if result["status"] == "failed" and saved_text:
             result["cached_text"] = saved_text
         self.store.update(lambda s: s.update(gamekee=result))

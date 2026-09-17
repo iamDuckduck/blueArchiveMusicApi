@@ -194,7 +194,7 @@ class ServiceTests(unittest.TestCase):
 
     def test_repeated_gamekee_failures_keep_last_successful_text(self):
         self.store.update(lambda s: s.update(gamekee={"status": "ready", "text": "Saved credits"}))
-        with patch("sources.fetch_gamekee", side_effect=lambda: {"status": "failed", "error": "567"}):
+        with patch("sources.fetch_gamekee", side_effect=lambda url: {"status": "failed", "error": "567"}):
             self.service.fetch_gamekee(force=True)
             self.service.fetch_gamekee(force=True)
         self.assertEqual(self.store.read()["gamekee"]["cached_text"], "Saved credits")

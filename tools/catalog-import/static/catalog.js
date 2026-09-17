@@ -28,6 +28,7 @@ function render() {
         <button class="button quiet" data-decision="grouping" ${catalog.scan.running ? "disabled" : ""}>Source grouping</button>
         <button class="button quiet" data-decision="review" ${catalog.scan.running ? "disabled" : ""}>Needs review</button>
         <button class="button secondary" data-evidence>Inspect source tracks</button>
+        ${c.kind === "release_candidate" && c.decision !== "grouping" ? `<a class="text-link" href="/albums/${c.id}/">Open saved review</a>` : ""}
       </div>
       <p class="helper">Inclusion is saved for preparation. Publication still requires a later review and publish action.</p>
       <pre class="source-evidence" hidden></pre>

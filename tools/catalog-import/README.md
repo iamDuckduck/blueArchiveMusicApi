@@ -31,9 +31,9 @@ per-field incoming-change review remains a later chapter.
 ## Backend development and media storage
 
 Everyday local development and manual testing use the normal `dev` profile:
-development PostgreSQL, Redis, and a dedicated development R2 bucket. There is
+development PostgreSQL and a dedicated development R2 bucket. There is
 no separate H2/local-media application profile or `/media/` route in this chapter.
-Production uses the `prod` profile with its own database, Redis and R2 settings.
+Production uses the `prod` profile with its own database and R2 settings.
 
 Load the backend's ignored environment file through your IDE/run configuration;
 Spring Boot does not automatically load arbitrary `.env` files. Use these existing
@@ -44,7 +44,6 @@ SPRING_PROFILES_ACTIVE=dev
 POSTGRES_DATASOURCE_URL=jdbc:postgresql://localhost:5432/<development-database>
 POSTGRES_USER=<development-user>
 POSTGRES_PASSWORD=<development-password>
-REDIS_URL=redis://localhost:6379
 R2_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
 R2_BUCKET=bluearchive-music-dev
 R2_ACCESS_KEY=<development-bucket-only-access-key>
@@ -107,12 +106,27 @@ existing play count. Responses include `albumId`, `songId` (null for an album),
 `created` and `status`. Shared artists are matched by reviewed display name and
 linked by role; character/CV pairs currently become combined display names.
 
-The automated API check uses test-only H2 and temporary files, with the Redis
-scheduler mocked. It verifies authentication, album-before-track validation,
+The automated API check uses test-only H2 and temporary files.
+It verifies authentication, album-before-track validation,
 repeated publication, public album metadata, stable IDs/credits/play counts and
 unchanged stored bytes. It does not call real R2, PostgreSQL or a browser, and it
 does not reintroduce the removed local-media route. Concurrent metadata-edit
 protection and full publish-to-player verification are still later review work.
+
+## Direct play counting (revised chapter 14)
+
+`POST /user/song/{id}/play` now performs one transactional, atomic database
+increment of `play_count`; it does not load and save the whole song. Existing
+songs still return 202, unknown IDs return 404, and a null counter starts at one.
+There is no background polling or Redis dependency. No plays means no counter
+queries. Concurrent-play tests verify increments and unchanged song metadata in
+H2; they do not establish PostgreSQL concurrency or simultaneous import safety.
+
+Before upgrading an existing Redis-based deployment, stop incoming play writes,
+let the old scheduler drain pending `songPlayCounts::*` counters, and verify they
+were persisted before stopping the old backend. This change does not migrate
+pending Redis counts or remove any running Redis service or stored data.
+
 ## Publish selected reviewed tracks
 
 Start the backend with its normal development settings above, including
@@ -152,7 +166,7 @@ Open `http://127.0.0.1:8766/catalog`, scan, inspect a candidate's source records
 and save an include/skip/review decision. Reload the page, then stop/restart the
 tool and confirm the choice remains. This directory is separate from your saved
 Veritas review. Scanning needs internet access to Kivo, but no Spring backend,
-PostgreSQL, Redis or R2. With the Python API key unset, publication is disabled.
+PostgreSQL or R2. With the Python API key unset, publication is disabled.
 
 ## Separate release reviews
 

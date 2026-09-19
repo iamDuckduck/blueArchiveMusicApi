@@ -28,11 +28,6 @@ spring:
     docker:
         compose:
             enabled: false
-    cache:
-        type: redis
-    data:
-        redis:
-            url: ${blueArchive.redis.url}
     datasource:
         url: ${blueArchive.datasource.url}
         username: ${blueArchive.datasource.username}

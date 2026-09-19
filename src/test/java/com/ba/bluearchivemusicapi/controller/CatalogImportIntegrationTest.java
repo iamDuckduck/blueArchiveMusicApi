@@ -2,7 +2,7 @@ package com.ba.bluearchivemusicapi.controller;
 
 import com.ba.bluearchivemusicapi.repositories.AlbumRepository;
 import com.ba.bluearchivemusicapi.repositories.SongRepository;
-import com.ba.bluearchivemusicapi.scheduler.SongPlayCountScheduledTask;
+import com.ba.bluearchivemusicapi.service.SongService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,13 +13,13 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockMultipartHttpServletRequestBuilder;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest(properties = {
@@ -40,11 +40,10 @@ class CatalogImportIntegrationTest {
         registry.add("app.catalog-media.local-root", () -> mediaDirectory.toString());
     }
 
-    @MockitoBean SongPlayCountScheduledTask playCountScheduledTask;
-
     @Autowired MockMvc mockMvc;
     @Autowired AlbumRepository albumRepository;
     @Autowired SongRepository songRepository;
+    @Autowired SongService songService;
 
     @Test
     void repeatedPublicationPreservesIdsCreditsPlayCountAndStoredBytes() throws Exception {
@@ -83,10 +82,9 @@ class CatalogImportIntegrationTest {
         assertThat(java.nio.file.Files.readAllBytes(audioFile)).containsExactly(0, 1, 2, 3, 4, 5);
 
         long songId = songRepository.findAll().get(0).getId();
-        // Existing plays are database state here; the normal Redis counting flow is unchanged.
-        var existingSong = songRepository.findById(songId).orElseThrow();
-        existingSong.setPlayCount(7L);
-        songRepository.saveAndFlush(existingSong);
+        for (int play = 0; play < 7; play++) {
+            mockMvc.perform(post("/user/song/{id}/play", songId)).andExpect(status().isAccepted());
+        }
         // Retry after a success response was lost: IDs, credits, play count and bytes survive.
         mockMvc.perform(albumRequest()).andExpect(status().isOk())
                 .andExpect(jsonPath("$.albumId").value(albumId))
@@ -120,6 +118,59 @@ class CatalogImportIntegrationTest {
                 .andExpect(jsonPath("$.songList[2].trackNumber").value(4));
         mockMvc.perform(orderedTrack("602", "Invalid order", "null", "null", 0)).andExpect(status().isBadRequest());
         assertThat(songRepository.count()).isEqualTo(3);
+    }
+
+    @Test
+    void concurrentPlaysIncrementOnlyTheCounter() throws Exception {
+        mockMvc.perform(albumRequest()).andExpect(status().isOk());
+        mockMvc.perform(trackRequest()).andExpect(status().isOk());
+        var song = songRepository.findAll().get(0);
+        song.setTitle("Reviewed title");
+        song.setDescription("Keep reviewed metadata");
+        songRepository.saveAndFlush(song);
+
+        var workers = java.util.concurrent.Executors.newFixedThreadPool(4);
+        var start = new java.util.concurrent.CountDownLatch(1);
+        try {
+            var tasks = new java.util.ArrayList<java.util.concurrent.Future<?>>();
+            for (int i = 0; i < 4; i++) {
+                tasks.add(workers.submit(() -> {
+                    if (!start.await(10, java.util.concurrent.TimeUnit.SECONDS)) {
+                        throw new IllegalStateException("Timed out waiting to start concurrent plays");
+                    }
+                    for (int play = 0; play < 10; play++) {
+                        songService.incrementSongPlayCount(song.getId());
+                    }
+                    return null;
+                }));
+            }
+            start.countDown();
+            for (var task : tasks) {
+                task.get(30, java.util.concurrent.TimeUnit.SECONDS);
+            }
+        } finally {
+            workers.shutdownNow();
+        }
+        var updated = songRepository.findById(song.getId()).orElseThrow();
+        assertThat(updated.getPlayCount()).isEqualTo(40L);
+        assertThat(updated.getTitle()).isEqualTo("Reviewed title");
+        assertThat(updated.getDescription()).isEqualTo("Keep reviewed metadata");
+        assertThat(updated.getAudioPath()).isEqualTo(song.getAudioPath());
+        assertThat(updated.getDisplayOrder()).isEqualTo(song.getDisplayOrder());
+        assertThat(updated.getTrackNumber()).isEqualTo(song.getTrackNumber());
+    }
+
+    @Test
+    void playsHandleNullCountersAndRejectUnknownSongs() throws Exception {
+        mockMvc.perform(albumRequest()).andExpect(status().isOk());
+        mockMvc.perform(trackRequest()).andExpect(status().isOk());
+        var song = songRepository.findAll().get(0);
+        song.setPlayCount(null);
+        songRepository.saveAndFlush(song);
+        mockMvc.perform(post("/user/song/{id}/play", song.getId())).andExpect(status().isAccepted());
+        assertThat(songRepository.findById(song.getId()).orElseThrow().getPlayCount()).isEqualTo(1L);
+        mockMvc.perform(post("/user/song/{id}/play", Long.MAX_VALUE)).andExpect(status().isNotFound());
+        assertThat(songRepository.count()).isEqualTo(1);
     }
 
     private MockMultipartHttpServletRequestBuilder orderedTrack(String id, String title, String disc, String position, int order) {

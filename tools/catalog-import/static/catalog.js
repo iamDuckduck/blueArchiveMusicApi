@@ -72,7 +72,7 @@ $("#candidates").addEventListener("click", async event => {
       const targets = catalog.candidates.filter(c => c.id !== item.id && c.kind === "release_candidate" && !c.redirect_to && c.decision !== "grouping");
       section.querySelector(".mapping").innerHTML = `<fieldset><legend>Map source tracks to an identified release</legend>
         <label>Target release<select data-target><option value="">Choose an existing release</option>${targets.map(c => `<option value="${c.id}">${escapeHtml(c.source_album)}</option>`).join("")}</select></label>
-        ${item.records.map(t => `<label><input type="checkbox" data-source-track value="${t.id}"> #${t.id} ${escapeHtml(t.title)}</label>`).join("")}
+        ${item.records.map(t => `<label class="checkbox-row"><input type="checkbox" data-source-track value="${t.id}"> #${t.id} ${escapeHtml(t.title)}</label>`).join("")}
         <button type="button" class="button primary" data-map>Map selected tracks</button>
         ${item.kind === "release_candidate" && !item.manual && !item.redirect_to ? '<button type="button" class="button quiet" data-link>Same release / renamed label: link to target</button>' : ""}
         <p class="helper">Mapping retains the source and creates unselected track appearances in the target review. Linking is only for the same release, not another edition; existing saved reviews are never merged or deleted.</p>

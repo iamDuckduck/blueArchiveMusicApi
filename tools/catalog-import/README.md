@@ -128,6 +128,19 @@ silently overwrite that correction while publishing a composer change. It must
 compare the latest content and accept a new baseline first. Existing import
 records are locked during publication so competing updates are checked in order.
 
+Chapter 15 follow-up: simultaneous first-time album creation is resolved by the
+album identity unique constraint. The losing transaction rolls back, then retries
+once in a fresh transaction with the original requested revision: identical
+content returns `unchanged`, while different content returns 409 with the winner's
+state. Only this specific unique-constraint collision is retried; other database
+errors are not swallowed. Tests force both requests to observe a missing album
+before either inserts it. Revision decisions now use named outcomes, and media
+prediction/storage share the same key calculation.
+
+This is not a redesign of upload transactions: locks still span media storage,
+and a losing create may already have stored immutable media. Potential orphan
+files are logged and retained for deliberate cleanup, not automatically deleted.
+
 The Python comparison interface is chapter 16 and is not applied yet: new records
 and identical retries still work, but publishing changed existing content now
 requires a revision-aware client. Tests cover stale drafts, identical retries,

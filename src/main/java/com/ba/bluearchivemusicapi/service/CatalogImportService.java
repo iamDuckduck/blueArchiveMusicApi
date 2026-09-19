@@ -11,8 +11,13 @@ import com.ba.bluearchivemusicapi.repositories.ArtistRepository;
 import com.ba.bluearchivemusicapi.repositories.CategoryRepository;
 import com.ba.bluearchivemusicapi.repositories.SongRepository;
 import lombok.RequiredArgsConstructor;
+import org.hibernate.exception.ConstraintViolationException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.LinkedHashSet;
@@ -30,12 +35,42 @@ public class CatalogImportService {
     private final ArtistRepository artistRepository;
     private final CatalogMediaStorage mediaStorage;
     private final CatalogImportSnapshot snapshots;
+    private final PlatformTransactionManager transactionManager;
 
-    @Transactional
     public CatalogImportResultDTO publishAlbum(
             String source, String sourceAlbumId, CatalogAlbumImportDTO input,
             MultipartFile original, MultipartFile cover400, MultipartFile cover800, String expectedRevision) {
         validateIdentity(source, sourceAlbumId);
+        var transaction = new TransactionTemplate(transactionManager);
+        transaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        try {
+            return transaction.execute(status -> publishAlbumInTransaction(
+                    source, sourceAlbumId, input, original, cover400, cover800, expectedRevision));
+        } catch (DataIntegrityViolationException failure) {
+            if (!isAlbumIdentityCollision(failure)) throw failure;
+            // The failed insert has rolled back. Re-check the winner in a fresh transaction,
+            // keeping the caller's original revision. Retry this specific race only once.
+            return transaction.execute(status -> publishAlbumInTransaction(
+                    source, sourceAlbumId, input, original, cover400, cover800, expectedRevision));
+        }
+    }
+
+    static boolean isAlbumIdentityCollision(DataIntegrityViolationException failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof ConstraintViolationException constraint
+                    && "23505".equals(constraint.getSQLState())
+                    && constraint.getConstraintName() != null
+                    && constraint.getConstraintName().toLowerCase(java.util.Locale.ROOT)
+                        .contains("uq_album_import_identity")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private CatalogImportResultDTO publishAlbumInTransaction(
+            String source, String sourceAlbumId, CatalogAlbumImportDTO input,
+            MultipartFile original, MultipartFile cover400, MultipartFile cover800, String expectedRevision) {
         Album album = albumRepository.findImportForUpdate(source, sourceAlbumId).orElse(null);
         boolean created = album == null;
         String root = "catalog/" + source + "/albums/" + sourceAlbumId + "/covers/";
@@ -43,7 +78,9 @@ public class CatalogImportService {
         CatalogImportStateDTO desired = snapshots.state(current.albumId(), null, CatalogImportSnapshot.albumFields(input),
                 CatalogImportSnapshot.albumMedia(mediaStorage.keyFor(original, root + "original." + extension(original)),
                         mediaStorage.keyFor(cover400, root + "400.jpg"), mediaStorage.keyFor(cover800, root + "800.jpg")));
-        if (!checkRevision(current, desired, expectedRevision)) return result(current, false, "unchanged");
+        if (publicationDecision(current, desired, expectedRevision) == PublicationDecision.UNCHANGED) {
+            return result(current, false, "unchanged");
+        }
         if (created) album = new Album();
         String originalPath = mediaStorage.store(original, root + "original." + extension(original));
         String cover400Path = mediaStorage.store(cover400, root + "400.jpg");
@@ -81,7 +118,9 @@ public class CatalogImportService {
         CatalogImportStateDTO current = snapshots.track(song);
         CatalogImportStateDTO desired = snapshots.state(album.getId(), current.songId(), CatalogImportSnapshot.trackFields(input),
                 CatalogImportSnapshot.trackMedia(mediaStorage.keyFor(audio, audioKey), album.getCover400Path()));
-        if (!checkRevision(current, desired, expectedRevision)) return result(current, false, "unchanged");
+        if (publicationDecision(current, desired, expectedRevision) == PublicationDecision.UNCHANGED) {
+            return result(current, false, "unchanged");
+        }
         if (created) song = new Song();
 
         String audioPath = mediaStorage.store(audio, audioKey);
@@ -117,11 +156,13 @@ public class CatalogImportService {
         return snapshots.track(songRepository.findByAlbumIdAndImportSourceAndSourceTrackId(album.getId(), source, trackId).orElse(null));
     }
 
-    private boolean checkRevision(CatalogImportStateDTO current, CatalogImportStateDTO desired, String expected) {
+    private enum PublicationDecision { UNCHANGED, WRITE_ALLOWED }
+
+    private PublicationDecision publicationDecision(CatalogImportStateDTO current, CatalogImportStateDTO desired, String expected) {
         // No write is needed for identical content, including after a lost successful response.
-        if (current.exists() && current.revision().equals(desired.revision())) return false;
+        if (current.exists() && current.revision().equals(desired.revision())) return PublicationDecision.UNCHANGED;
         if (!java.util.Objects.equals(current.revision(), expected)) throw new CatalogConflictException(current);
-        return true;
+        return PublicationDecision.WRITE_ALLOWED;
     }
 
     private CatalogImportResultDTO result(CatalogImportStateDTO state, boolean created, String status) {

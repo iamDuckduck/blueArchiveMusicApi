@@ -3,6 +3,7 @@ package com.ba.bluearchivemusicapi.controller;
 import com.ba.bluearchivemusicapi.repositories.AlbumRepository;
 import com.ba.bluearchivemusicapi.repositories.SongRepository;
 import com.ba.bluearchivemusicapi.service.SongService;
+import com.ba.bluearchivemusicapi.service.CatalogMediaStorage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,6 +14,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockMultipartHttpServletRequestBuilder;
 
@@ -45,6 +47,64 @@ class CatalogImportIntegrationTest {
     @Autowired SongRepository songRepository;
     @Autowired SongService songService;
     @Autowired com.fasterxml.jackson.databind.ObjectMapper mapper;
+    @MockitoSpyBean CatalogMediaStorage mediaStorage;
+
+    @Test
+    void simultaneousIdenticalAlbumCreationReturnsCreatedAndUnchanged() throws Exception {
+        assertConcurrentAlbumCreation("Same title", "Same title", false);
+    }
+
+    @Test
+    void simultaneousDifferentAlbumCreationReturnsWinnerAndConflict() throws Exception {
+        assertConcurrentAlbumCreation("Draft A", "Draft B", true);
+    }
+
+    private void assertConcurrentAlbumCreation(String firstTitle, String secondTitle, boolean conflict) throws Exception {
+        // Pause after both transactions have read a missing album, forcing an insert race.
+        var bothReadMissing = new java.util.concurrent.CyclicBarrier(2);
+        var originalChecks = new java.util.concurrent.atomic.AtomicInteger();
+        org.mockito.Mockito.doAnswer(call -> {
+            if (originalChecks.incrementAndGet() <= 2) {
+                bothReadMissing.await(10, java.util.concurrent.TimeUnit.SECONDS);
+            }
+            return call.callRealMethod();
+        }).when(mediaStorage).keyFor(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.endsWith("/original.png"));
+
+        var executor = java.util.concurrent.Executors.newFixedThreadPool(2);
+        var responses = new java.util.ArrayList<org.springframework.mock.web.MockHttpServletResponse>();
+        try {
+            var first = executor.submit(() -> mockMvc.perform(albumRequest(firstTitle)).andReturn().getResponse());
+            var second = executor.submit(() -> mockMvc.perform(albumRequest(secondTitle)).andReturn().getResponse());
+            responses.add(first.get(30, java.util.concurrent.TimeUnit.SECONDS));
+            responses.add(second.get(30, java.util.concurrent.TimeUnit.SECONDS));
+        } finally {
+            executor.shutdownNow();
+        }
+        assertThat(originalChecks.get()).isEqualTo(3); // Both inserts attempted, then one fresh-transaction retry.
+        assertThat(albumRepository.count()).isEqualTo(1);
+        var album = albumRepository.findAll().get(0);
+        var statuses = responses.stream().map(response -> response.getStatus()).toList();
+        assertThat(statuses).containsExactlyInAnyOrder(200, conflict ? 409 : 200);
+        var outcomes = new java.util.ArrayList<String>();
+        for (var response : responses) {
+            var body = mapper.readTree(response.getContentAsString());
+            if (response.getStatus() == 409) {
+                assertThat(body.path("current").path("albumId").asLong()).isEqualTo(album.getId());
+                assertThat(body.path("current").path("metadata").path("title").asText()).isEqualTo(album.getTitle());
+                assertThat(body.path("current").path("revision").asText()).isNotBlank();
+            } else {
+                assertThat(body.path("albumId").asLong()).isEqualTo(album.getId());
+                outcomes.add(body.path("status").asText());
+            }
+        }
+        if (conflict) {
+            assertThat(outcomes).containsExactly("created");
+            assertThat(album.getTitle()).isIn(firstTitle, secondTitle);
+        } else {
+            assertThat(outcomes).containsExactlyInAnyOrder("created", "unchanged");
+        }
+    }
 
     @Test
     void repeatedPublicationPreservesIdsCreditsPlayCountAndStoredBytes() throws Exception {
@@ -278,13 +338,17 @@ class CatalogImportIntegrationTest {
     }
 
     private MockMultipartHttpServletRequestBuilder albumRequest() {
+        return albumRequest("青春あんさんぶる Vol.2 「ヴェリタス」");
+    }
+
+    private MockMultipartHttpServletRequestBuilder albumRequest(String title) {
         MockMultipartHttpServletRequestBuilder request = multipart(
                 "/admin/catalog-import/kivo/albums/veritas-vol-2");
         request.with(item -> { item.setMethod("PUT"); return item; });
         request.header("X-Admin-Api-Key", KEY);
         request.file(json("metadata", """
-                {"title":"青春あんさんぶる Vol.2 「ヴェリタス」","category":"青春あんさんぶる","releaseDate":"2023-12-25","description":"reviewed"}
-                """));
+                {"title":"%s","category":"青春あんさんぶる","releaseDate":"2023-12-25","description":"reviewed"}
+                """.formatted(title)));
         request.file(file("coverOriginal", "cover.png", "image/png", new byte[]{1, 2}));
         request.file(file("cover400", "cover-400.jpg", "image/jpeg", new byte[]{3, 4}));
         request.file(file("cover800", "cover-800.jpg", "image/jpeg", new byte[]{5, 6}));

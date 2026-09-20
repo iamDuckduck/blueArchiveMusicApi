@@ -141,11 +141,10 @@ This is not a redesign of upload transactions: locks still span media storage,
 and a losing create may already have stored immutable media. Potential orphan
 files are logged and retained for deliberate cleanup, not automatically deleted.
 
-The Python comparison interface is chapter 16 and is not applied yet: new records
-and identical retries still work, but publishing changed existing content now
-requires a revision-aware client. Tests cover stale drafts, identical retries,
+The Python comparison interface in chapter 16 sends the saved revision and helps
+review conflicts before retrying. Tests cover stale drafts, identical retries,
 edits outside the import endpoint and competing updates using H2 and temporary
-media; real PostgreSQL/R2 and browser verification remain separate.
+media; real PostgreSQL/R2 verification remains separate.
 
 ## Direct play counting (revised chapter 14)
 
@@ -228,3 +227,26 @@ Display order controls the album sequence independently of nullable official dis
 ## Review changed source fields
 
 Changed Kivo/tag fields appear beside reviewed values. Use a suggestion or keep the reviewed value for each field; unresolved proposals block selected-track publication. Decisions persist and clear publication selection.
+
+## Compare published content (chapter 16)
+
+Publication receipts and reviewed revisions are saved separately for each backend
+URL. Check published state reads the latest content without uploading or advancing
+your saved revision. The comparison shows changed fields first; matching fields
+and technical details are optional.
+
+If publishing meets a newer version, it pauses with the published values beside
+your saved draft. Edit my draft takes you back to the local fields. Keep my values
+for next publish asks for confirmation before accepting the shown revision as the
+new starting point. Neither action publishes; confirmation keeps the draft/media
+and clears selection (all tracks for an album, only that track for a track).
+Re-select reviewed tracks and publish separately when ready.
+
+Publication sends the album first, then selected tracks. Progress records which
+items were saved, conflicted or not sent; earlier successful records are not rolled
+back. Unconfirmed requests can be checked/retried using the same source identities.
+Prepared files must still match their saved validation hashes before upload.
+
+Run `node --test tests/test_published_comparison.cjs` for field comparison checks,
+alongside the Python tests above. The local conflict preview was browser-checked
+with fake data; these checks do not publish to PostgreSQL or R2.

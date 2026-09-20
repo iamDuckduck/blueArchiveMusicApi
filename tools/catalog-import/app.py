@@ -33,6 +33,8 @@ def create_app(data_dir=None, backend_url="http://127.0.0.1:8080", api_key=None)
     def current_view():
         state = store.view()
         state["publication"]["enabled"] = g.review[1] is not None
+        if g.review[1] is not None:
+            state["publication"]["destination"] = g.review[1].backend_url
         prefix = g.review_prefix
         if state["album"]["cover"].get("preview_url"):
             state["album"]["cover"]["preview_url"] = prefix + state["album"]["cover"]["preview_url"]
@@ -202,6 +204,18 @@ def create_app(data_dir=None, backend_url="http://127.0.0.1:8080", api_key=None)
         service.start(action)
         return jsonify(current_view()), 202
 
+    @app.post("/api/publication/baseline")
+    def accept_publication_baseline():
+        if g.review[1] is None:
+            raise ValueError("Publication is not configured.")
+        if store.read()["job"].get("running"):
+            raise ValueError("Wait for the local job to finish.")
+        payload = request.get_json()
+        if not isinstance(payload, dict) or not isinstance(payload.get("record"), str):
+            raise ValueError("Choose the published record to reconcile.")
+        g.review[1].accept_baseline(payload["record"], payload.get("revision"))
+        return jsonify(current_view())
+
     @app.post("/api/tracks/<track_id>/suggestions")
     def review_source_suggestions(track_id):
         if store.read()["job"].get("running"):
@@ -213,7 +227,6 @@ def create_app(data_dir=None, backend_url="http://127.0.0.1:8080", api_key=None)
             raise ValueError("Choose incoming suggestions to review.")
         store.review_suggestions(track_id, payload.get("proposals"), payload.get("choice"))
         return jsonify(current_view())
-
 
     def local_media(relative):
         target = (store.directory / relative).resolve()

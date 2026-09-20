@@ -2,6 +2,8 @@ let review;
 let pending = { album: {}, tracks: {} };
 let saving = false;
 let polling = false;
+let showMatchingFields = false;
+let publicationConfirmation = null;
 const $ = (selector, root = document) => root.querySelector(selector);
 const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"})[c]);
 const statusLabels = {pending:"Not prepared", ready:"Ready", failed:"Needs attention", running:"Preparing", excluded:"Excluded", review:"Needs review", included:"Included", skipped:"Skipped"};
@@ -109,6 +111,64 @@ function setBadge(element, status, customLabel) {
   element.textContent = customLabel || statusLabels[status] || status;
 }
 
+function renderPublished(state) {
+  const publication = state.publication;
+  $("#check-published").disabled = state.job.running || !publication.enabled;
+  $("#publish-destination").textContent = publication.enabled ? `Destination: ${publication.destination}` : "Publication is not configured.";
+  const destination = publication.destinations?.[publication.destination];
+  const observed = destination?.observed || {};
+  const conflict = destination?.conflict;
+  $("#published-panel").classList.toggle("has-conflict", !!conflict);
+  $("#published-heading").textContent = conflict ? `Publishing paused: this ${conflict === "album" ? "album" : "track"} changed` : "Compare with published content";
+  $("#published-explanation").textContent = conflict
+    ? "The published version changed since your last review. This record was not overwritten. Compare the differences below; your draft is safe."
+    : "Check the published version before your next upload. Checking or reviewing a version does not publish anything.";
+  const attempt = publication.attempt;
+  const progress = $("#publication-progress");
+  progress.hidden = !attempt || attempt.destination !== publication.destination;
+  $("#progress-explanation").hidden = progress.hidden;
+  if (!progress.hidden) {
+    const statusNames = {not_sent:"Not sent", sending:"Sending", saved:"Saved", unchanged:"Already matches", conflict:"Conflict", failed:"Unconfirmed · check / retry"};
+    progress.innerHTML = attempt.records.map(item => {
+      const status = item.status === "sending" && !(state.job.running && state.job.action === "publish") ? "failed" : item.status;
+      return `<li class="progress-${status}"><span>${escapeHtml(item.record === "album" ? "Album" : state.tracks.find(t => t.id === item.record)?.fields.title || `Track ${item.record}`)}</span><strong>${escapeHtml(statusNames[status])}</strong></li>`;
+    }).join("");
+  }
+  const container = $("#published-comparison");
+  const comparison = Object.entries(observed).map(([record, current]) => {
+    const local = record === "album" ? state.album : state.tracks.find(t => t.id === record);
+    return {record, current, title:local.fields.title, fields:local.fields, media:record === "album" ? local.cover.files : local.media,
+      rows:publicationRows(record, state, current), accepted:Object.hasOwn(destination.receipts, record) && destination.receipts[record].revision === current.revision};
+  });
+  const serialized = JSON.stringify({comparison, conflict, showMatchingFields, publicationConfirmation});
+  if (container.dataset.rendered !== serialized) {
+    const openTechnical = new Set([...container.querySelectorAll("details[open]")].map(item => item.dataset.technical));
+    container.replaceChildren(...comparison.map(({record, current, title, fields, media, rows, accepted}) => {
+      const card = document.createElement("article");
+      card.className = "published-record";
+      const differences = rows.filter(row => !row.same);
+      const unknown = differences.filter(row => row.unknown).length;
+      const changed = differences.length - unknown;
+      const summary = `${changed} ${changed === 1 ? "difference" : "differences"}${unknown ? ` · ${unknown} media ${unknown === 1 ? "check" : "checks"} needed` : ""}`;
+      const visibleRows = showMatchingFields ? rows : differences;
+      const confirming = publicationConfirmation?.record === record && publicationConfirmation.revision === current.revision;
+      card.innerHTML = `<div class="comparison-record-heading"><h3>${record === "album" ? "Album" : "Track"}: ${escapeHtml(title)}</h3><span class="badge ${accepted ? "ready" : record === conflict ? "warning" : ""}">${accepted ? "Version reviewed" : current.exists ? summary : "Not published here"}</span></div>
+        ${visibleRows.length ? `<table class="comparison-table"><caption class="sr-only">Published values compared with your saved draft</caption><thead><tr><th scope="col">Field</th><th scope="col">Published value</th><th scope="col">Your saved draft</th></tr></thead><tbody>${visibleRows.map(row => `<tr class="${row.same ? "matching-row" : "changed-row"}"><th scope="row">${escapeHtml(row.label)}</th><td>${escapeHtml(row.published)}</td><td>${escapeHtml(row.draft)}</td></tr>`).join("")}</tbody></table>` : '<p class="helper">No differences in the compared fields. Technical details are available below.</p>'}
+        <div class="comparison-actions"><button class="button primary" type="button" data-edit-draft="${escapeHtml(record)}">Edit my draft</button><button class="button secondary" type="button" data-review-version="${escapeHtml(record)}" ${accepted ? "disabled" : ""}>${accepted ? "Version reviewed" : "Keep my values for next publish"}</button></div>
+        <p class="helper">${accepted ? "Nothing was published by reviewing this version. Re-select prepared tracks and publish separately when ready." : "Edit your draft to preserve published corrections, or deliberately keep your own values. Neither action publishes."}</p>
+        ${confirming ? `<div class="version-confirmation" role="group" aria-label="Confirm reviewed version"><strong>Use this published version as your new starting point?</strong><p>Your draft stays unchanged. A later publish can replace the published values above. ${record === "album" ? "All track selections will be cleared" : "This track will be deselected"} so you can review before publishing.</p><button class="button secondary" type="button" data-confirm-version="${escapeHtml(record)}">Confirm reviewed version</button><button class="button quiet" type="button" data-cancel-version>Cancel</button></div>` : ""}
+        <details data-technical="${escapeHtml(record)}" ${openTechnical.has(record) ? "open" : ""}><summary>Technical details</summary><div class="evidence-grid"><div><h4>Published snapshot</h4><pre>${escapeHtml(JSON.stringify(current, null, 2))}</pre></div><div><h4>Local fields and media</h4><pre>${escapeHtml(JSON.stringify({fields, media}, null, 2))}</pre></div></div></details>`;
+      return card;
+    }));
+    if (!comparison.length) container.innerHTML = '<p class="comparison-empty">No published snapshot checked yet. Use “Check published state” to compare without uploading.</p>';
+    container.dataset.rendered = serialized;
+  }
+  for (const button of container.querySelectorAll("button")) {
+    const record = button.dataset.reviewVersion;
+    button.disabled = state.job.running || !!(record && Object.hasOwn(destination.receipts, record) && destination.receipts[record].revision === observed[record].revision);
+  }
+}
+
 function renderSuggestions(card, track, busy) {
   const pending = track.pending_suggestions || {};
   const container = $(".source-proposals", card);
@@ -164,6 +224,7 @@ function render(state) {
   $("#prepare").textContent = busy && state.job.action === "prepare" ? "Preparing files…" : "Prepare / retry tracks";
   const cover = album.cover;
   const publication = state.publication || {status:"pending", message:"Not published.", enabled:false};
+  renderPublished(state);
   $("#publish-message").textContent = publication.message;
   const selectedTracks = state.tracks.filter(t => t.included && t.publish_selected && t.source_id);
   $("#publish").disabled = busy || !publication.enabled || album.decision !== "included" || cover.status !== "ready" || !selectedTracks.length || selectedTracks.some(t => t.media.status !== "ready");
@@ -310,6 +371,43 @@ $("#fetch").addEventListener("click", () => act("/api/jobs/fetch"));
 $("#prepare").addEventListener("click", () => act("/api/jobs/prepare"));
 $("#refresh-media").addEventListener("click", () => act("/api/jobs/refresh"));
 $("#publish").addEventListener("click", () => act("/api/jobs/publish"));
+$("#check-published").addEventListener("click", () => act("/api/jobs/published"));
+$("#show-matching").addEventListener("change", event => {
+  showMatchingFields = event.target.checked;
+  renderPublished(review);
+});
+$("#published-comparison").addEventListener("click", async event => {
+  const button = event.target.closest("button");
+  if (!button) return;
+  if (button.hasAttribute("data-edit-draft")) {
+    const record = button.dataset.editDraft;
+    const input = record === "album" ? $("#album-title") : $(`#track-${record} [data-track-field="title"]`);
+    input.scrollIntoView({block:"center"}); input.focus();
+    notice("Edit and save your draft, then return to the comparison to review the published version. Nothing has been published.");
+    return;
+  }
+  try {
+    if (button.hasAttribute("data-review-version")) {
+      await saveEdits();
+      const record = button.dataset.reviewVersion;
+      const current = review.publication.destinations[review.publication.destination].observed[record];
+      publicationConfirmation = {record, revision:current.revision};
+      renderPublished(review);
+      $("[data-confirm-version]").focus();
+    } else if (button.hasAttribute("data-cancel-version")) {
+      const record = publicationConfirmation.record;
+      publicationConfirmation = null;
+      renderPublished(review);
+      $(`[data-review-version="${record}"]`).focus();
+    } else if (button.hasAttribute("data-confirm-version")) {
+      await saveEdits();
+      const state = await api("/api/publication/baseline", "POST", publicationConfirmation);
+      publicationConfirmation = null;
+      render(state);
+      $("#published-panel").focus({preventScroll:true});
+    }
+  } catch (error) { notice(error.message, true); }
+});
 $("#retry-gamekee").addEventListener("click", () => act("/api/jobs/gamekee"));
 $("#include").addEventListener("click", () => act("/api/decision", {decision:"included"}));
 $("#skip").addEventListener("click", () => act("/api/decision", {decision:"skipped"}));

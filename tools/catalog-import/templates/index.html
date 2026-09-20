@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Album review · Blue Archive Music</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='review.css') }}">
+  <script src="{{ url_for('static', filename='published-comparison.js') }}" defer></script>
   <script src="{{ url_for('static', filename='review.js') }}" defer></script>
 </head>
 <body data-review-prefix="{{ review_prefix or '' }}">
@@ -38,6 +39,15 @@
         </section>
         <section class="panel preparation-panel" aria-labelledby="prep-heading"><div><h2 id="prep-heading">Prepare files</h2><p id="job-message" aria-live="polite">Load source information to begin.</p><p id="cover-status" class="helper"></p><p class="helper">Explicit refresh downloads again even when URLs are unchanged. Failed replacements retain existing validated files. Changed source data or media requires reselection after review; unchanged results stay selected.</p></div><div><button id="prepare" class="button primary" type="button" disabled>Prepare included tracks</button><button id="refresh-media" class="button secondary" type="button" disabled>Refresh source and media</button></div></section>
         <section class="panel preparation-panel" aria-labelledby="publish-heading"><div><h2 id="publish-heading">Publish to development catalog</h2><p id="publish-message" aria-live="polite">Not published.</p><p class="helper">Uses the configured backend and its isolated catalog-import database/media destination. Repeating publication updates the same source identities.</p></div><button id="publish" class="button primary" type="button" disabled>Publish reviewed album</button></section>
+        <section class="panel published-panel" id="published-panel" aria-labelledby="published-heading" tabindex="-1">
+          <div class="section-title"><h2 id="published-heading">Compare published content</h2><button id="check-published" class="button secondary" type="button">Check published state</button></div>
+          <p id="published-explanation" aria-live="polite"></p>
+          <p id="progress-explanation" class="helper" hidden>Last publish attempt · Saved records stay saved. Remaining records are not sent after a conflict.</p>
+          <ol id="publication-progress" aria-label="Latest publish attempt" hidden></ol>
+          <p id="publish-destination" class="helper"></p>
+          <label class="checkbox-row comparison-toggle"><input id="show-matching" type="checkbox"> Show matching fields too</label>
+          <div id="published-comparison"></div>
+        </section>
         <div class="section-title tracks-heading"><h2>Track review</h2><span class="muted">Edits stay separate from the source</span></div>
         <div id="tracks"><div class="panel loading">Loading your saved review…</div></div>
         <section class="panel source-panel" aria-labelledby="source-heading"><div class="section-title"><h2 id="source-heading">GameKee reference</h2><span id="gamekee-status" class="badge">Not checked</span></div><p id="gamekee-message">The matching album is checked when you load sources. You can still review if it is unavailable.</p><div class="source-actions"><a id="gamekee-link" class="text-link" target="_blank" rel="noopener noreferrer">Open album reference ↗</a><button id="retry-gamekee" type="button" class="button quiet">Check again</button></div><details id="gamekee-evidence" hidden><summary>Available source text</summary><pre id="gamekee-text"></pre></details><p class="helper">Compare these details with Kivo and edit the fields above when needed.</p></section>

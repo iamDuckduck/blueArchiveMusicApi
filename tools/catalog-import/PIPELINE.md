@@ -1,6 +1,36 @@
 # Catalog import — reviewed progress
 
-Updated: 2026-09-20. Follow-up branch: `feature/catalog-pipeline-finish`.
+Updated: 2026-09-20. This branch: `feature/catalog-credits-search`, based on the
+pipeline checkpoint `a9d3c95` on `feature/catalog-pipeline-finish`.
+
+## Next-stage checkpoint — credits and search
+
+The pipeline branch remains separate and unchanged. This follow-up adds:
+
+- Nullable character / voice-actor fields and shared aliases, with migration V1.11.
+- Exact reviewed-name profile enrichment without changing existing song revision
+  hashes or guessing how to split old names. Aliases never merge identities.
+- Public search across titles, albums and directly linked credits, including
+  associated instrumental credits. Matching multiple roles returns a song once.
+- A dark local `/credits` page. Alias saves explicitly update the configured
+  backend, not a local album draft; credentials remain server-side.
+
+Validation: **146 Python tests, 5 JavaScript comparison tests, 31 backend tests
+passed; 1 opt-in real-R2 test skipped.** The full backend package build passed.
+Fresh PostgreSQL migrations V1.1–V1.11, aliases, search membership/deduplication,
+unrelated-BGM exclusion, safe retries, unchanged media and source-review hashes
+passed in `target/credits-live-20260920-202738-5e2ca8/report.json`.
+Search ranking and five-result truncation were not separately stress-tested live.
+
+Browser check: the explicit alias save persisted across reload and searching
+`Chihiro demo` returned the vocal and instrumental exactly once in the existing
+frontend. Screenshots are in `target/credits-preview/`. This is a test-only alias.
+Preview ports 8772 / 15174 / 18084 use `catalog_credits_verify_0a1b59fd` and local
+MinIO. Development PostgreSQL/R2, the pipeline preview database and original saved
+reviews were not migrated or published by this stage. Read [the credits guide](CREDITS-GUIDE.md).
+
+Next is owner review, then deliberately rebuilding the catalog release by release.
+Do not proceed to bulk publication or Google sign-in/AWS deployment automatically.
 
 ## Milestone closed — owner-reviewed manual pipeline
 
@@ -204,8 +234,8 @@ official-song collections from formal albums without changing the backend contai
 1. GameKee full-content access is externally blocked (HTTP 567); matching remains
    an explicit operator-selected reference. The manual path works, but do not
    claim unattended retrieval or catalog-wide source coverage.
-2. Structured character/voice-actor credits, aliases and credit-aware search.
-   Existing reviewed names/roles work, but they do not complete searchable identities.
+2. Structured character/voice-actor credits, aliases and credit-aware search are
+   implemented on this separate branch; owner review remains before adoption.
 3. Representative checks and a fresh catalog rebuild using the new pipeline,
    not legacy source-ID backfill. One Veritas sample does not establish
    whole-catalog correctness. Review a replacement/cutover plan separately before

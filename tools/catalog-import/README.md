@@ -1,8 +1,10 @@
 # Local catalog review
 
 Reviewed base: `review/catalog-import-approved`. Follow-up work is on
-`feature/catalog-pipeline-finish`. Start with the [short operator guide](OPERATOR-GUIDE.md),
+`feature/catalog-pipeline-finish`; this worktree adds `feature/catalog-credits-search`.
+Start with the [short operator guide](OPERATOR-GUIDE.md),
 then [progress and remaining work](PIPELINE.md) or the [17-chapter reading guide](HISTORY.md).
+For the next stage, read [credit profiles, aliases and search](CREDITS-GUIDE.md).
 
 Requires Python 3.11+, FFmpeg and FFprobe on PATH. From this directory:
 
@@ -40,6 +42,7 @@ review and published-version comparison are included through chapter 16.
 | --- | --- | --- |
 | Ordinary automated tests | Test-only H2 / temporary SQLite reviews | Mocked storage and temporary files; no cloud bucket |
 | Full-pipeline failure/retry tests (chapter 17) | Separate local PostgreSQL: `catalog_import_verify` | Separate local MinIO bucket: `catalog-import-verify` |
+| Credits/search verification on this branch | Fresh local PostgreSQL: `catalog_credits_verify_<id>` | Same local MinIO test bucket; new import identity |
 | Everyday development, including manually testing the app | Development PostgreSQL | Dedicated **development R2 bucket** |
 | Production | Production database | Separate **production R2 bucket** |
 
@@ -48,6 +51,12 @@ Its test bucket is not a Cloudflare R2 bucket. You do not need to create another
 Cloudflare bucket for chapter 17. Manual app testing remains part of development;
 MinIO belongs to the separate verification setup, which can also support a
 deliberate browser check against those same test services.
+
+This branch adds migration V1.11. Use `verify_credits.py` for its separate test
+database, as described in the credits guide. Running `verify_live.py` from this
+branch would upgrade the older `catalog_import_verify` database to V1.11; do not
+do that when preserving the pipeline branch's preview. Starting this branch with
+normal development settings would likewise migrate that selected database.
 
 The explicit real-R2 smoke check below is an exception to offline tests: it uses
 the development R2 bucket to check the actual cloud configuration.

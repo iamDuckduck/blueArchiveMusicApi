@@ -97,3 +97,6 @@ not automatically merged, replaced or deleted. Production cutover is a separate 
 
 For commands and environment variables, see [setup](README.md). For evidence and
 remaining product work, see [progress](PIPELINE.md).
+
+After publication, this branch's [credit alias guide](CREDITS-GUIDE.md) explains
+how alternate names improve search without changing the local import draft.

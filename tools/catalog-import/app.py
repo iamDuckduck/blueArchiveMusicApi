@@ -12,6 +12,7 @@ from service import ReviewService
 from store import Store, find_track
 from publisher import Publisher, needs_media_refresh
 from catalog import Catalog
+from creditprofiles import CreditProfiles
 
 
 def create_app(data_dir=None, backend_url="http://127.0.0.1:8080", api_key=None):
@@ -21,6 +22,7 @@ def create_app(data_dir=None, backend_url="http://127.0.0.1:8080", api_key=None)
     publisher = Publisher(store, backend_url, api_key) if api_key else None
     service = ReviewService(store, publisher)
     catalog = Catalog(store.directory, service.job_lock)
+    credit_profiles = CreditProfiles(backend_url, api_key)
     app.extensions["review_store"] = store
     app.extensions["review_service"] = service
     app.extensions["catalog"] = catalog
@@ -270,6 +272,26 @@ def create_app(data_dir=None, backend_url="http://127.0.0.1:8080", api_key=None)
         if rule.rule == "/" or (rule.rule.startswith(("/api/", "/media/")) and not rule.rule.startswith("/api/catalog")):
             app.add_url_rule("/albums/<album_id>" + rule.rule, endpoint="album_" + rule.endpoint,
                              view_func=app.view_functions[rule.endpoint], methods=rule.methods - {"HEAD", "OPTIONS"})
+
+    # These edit shared backend credit profiles, not any local album review.
+    @app.get("/credits")
+    def credits_page():
+        return render_template("credits.html", backend_url=backend_url, credits_enabled=bool(api_key))
+
+    @app.get("/api/credits")
+    def search_credit_profiles():
+        return jsonify(profiles=credit_profiles.search(request.args.get("query", "")))
+
+    @app.get("/api/credits/<int:artist_id>")
+    def read_credit_profile(artist_id):
+        return jsonify(credit_profiles.get(artist_id))
+
+    @app.put("/api/credits/<int:artist_id>/aliases")
+    def save_credit_aliases(artist_id):
+        payload = request.get_json()
+        if not isinstance(payload, dict) or set(payload) != {"aliases"}:
+            raise ValueError("Expected an aliases list for this credit profile.")
+        return jsonify(credit_profiles.save_aliases(artist_id, payload["aliases"]))
     return app
 
 

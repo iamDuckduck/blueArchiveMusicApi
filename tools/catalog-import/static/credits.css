@@ -1,0 +1,16 @@
+.credit-layout { display:grid; grid-template-columns:minmax(240px,1fr) minmax(320px,1.4fr); gap:18px; align-items:start }
+.credit-layout .panel { min-width:0 }
+.credit-destination { overflow-wrap:anywhere }
+.credit-warning { padding:14px; border:1px solid var(--amber); border-radius:8px; color:var(--amber) }
+#credit-search { display:grid; gap:12px }
+#credit-search button { justify-self:start }
+#credit-results { padding:0; list-style:none; display:grid; gap:8px }
+#credit-results button { width:100%; text-align:left; overflow-wrap:anywhere; padding:12px }
+#credit-results small { display:block; color:var(--muted); font-weight:400; margin-top:4px }
+#credit-editor h3 { overflow-wrap:anywhere }
+#credit-context { display:grid; grid-template-columns:auto 1fr; gap:6px 12px; font-size:12px }
+#credit-context dt { color:var(--muted) }
+#credit-context dd { margin:0; overflow-wrap:anywhere }
+#credit-aliases { font-family:inherit }
+#alias-status { margin:12px 0 0 }
+@media(max-width:1000px) { .credit-layout { grid-template-columns:1fr } }

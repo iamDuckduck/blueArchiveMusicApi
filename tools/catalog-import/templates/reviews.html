@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Saved reviews · Blue Archive Music</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='review.css') }}">
+</head>
+<body>
+  <aside class="sidebar"><a class="brand" href="/catalog">Blue Archive Music</a><a class="nav-item" href="/catalog">Album discovery</a><a class="nav-item active" href="/reviews">Saved reviews</a><div class="sidebar-note">Local drafts<p>Saving a review does not publish it.</p></div></aside>
+  <main class="catalog-page"><header class="topbar"><span>Catalog / Saved reviews</span><a href="/catalog">Album discovery</a></header><div class="page-content">
+    <h1>Pick up where you left off.</h1>
+    <p>Your saved local reviews, including the original sample. Open one to continue reviewing; nothing is downloaded or published by this list.</p>
+    {% for review in reviews %}
+    <section class="panel">
+      <h2><a href="{{ review.url }}">{{ review.title }}</a></h2>
+      <p>{{ review.category or 'No category chosen' }} · {{ review.track_count }} tracks in this draft</p>
+      <a class="button secondary" href="{{ review.url }}">Open review</a>
+    </section>
+    {% else %}<p>No saved reviews yet. Start with Album discovery.</p>{% endfor %}
+  </div></main>
+</body>
+</html>

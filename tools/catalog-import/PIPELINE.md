@@ -2,6 +2,19 @@
 
 Updated: 2026-09-20. Follow-up branch: `feature/catalog-pipeline-finish`.
 
+## Milestone closed — owner-reviewed manual pipeline
+
+The owner accepts checking GameKee manually on its website; unattended article
+retrieval is not a requirement for this milestone. The manual-review import tool
+is complete for the agreed scope. Catalog rebuilding, credits/search review and
+deployment are separate next stages, not unfinished pipeline-tool steps.
+
+The navigation now uses **Saved reviews**, listing existing drafts by their saved
+titles. Veritas is an ordinary entry, not a special sidebar destination. The list
+does not create reviews, reset jobs, fetch sources or publish anything. Existing
+review URLs remain valid. Navigation regression checks bring the Python suite to
+130 passing tests; browser navigation is checked against the local review tool.
+
 The owner-led backend review covers [chapters 1–17](HISTORY.md), retained on
 `review/catalog-import-approved`. The owner subsequently authorized finishing the
 pipeline while away and keeping next-stage work on another branch. The manual-review

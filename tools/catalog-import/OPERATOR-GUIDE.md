@@ -4,6 +4,10 @@ The tool is your **local workbench**. The music app is the **published catalog**
 Nothing appears in the music app merely because you scanned, included, prepared
 or saved it here.
 
+Use **Album discovery** to find new candidates and **Saved reviews** to resume an
+existing draft. The original Veritas sample appears in the same saved-review list;
+opening that list does not prepare or publish music.
+
 ## The short path
 
 1. **Scan Kivo** on `/catalog`. This reads the source music list, not audio files.
@@ -63,6 +67,9 @@ article summaries are labelled as incomplete. Save manually checked reference
 notes and edit the relevant review fields yourself. Notes/evidence never silently
 become credits. The current GameKee CDN may return HTTP 567; the tool does not
 bypass that restriction.
+
+Manual GameKee checking in your browser is the accepted workflow when automated
+retrieval is unavailable; unattended retrieval is not needed to finish this tool.
 
 ## When something changes or fails
 

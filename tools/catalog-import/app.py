@@ -87,6 +87,10 @@ def create_app(data_dir=None, backend_url="http://127.0.0.1:8080", api_key=None)
     def catalog_page():
         return render_template("catalog.html")
 
+    @app.get("/reviews")
+    def saved_reviews_page():
+        return render_template("reviews.html", reviews=catalog.saved_reviews())
+
     @app.get("/api/catalog")
     def candidates():
         return jsonify(catalog.view())

@@ -6,7 +6,7 @@ import sqlite3
 import threading
 import uuid
 from collections import defaultdict
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -156,6 +156,28 @@ class Catalog:
                                     redirect_to=c.get("redirect_to"), manual=c.get("manual", False),
                                     mapped_track_count=len(c.get("mapped_records", {})))
                                for c in state["candidates"].values()]}
+
+    def saved_reviews(self):
+        """List existing drafts without opening/recovering or creating a Store."""
+        locations = [(self.directory / "reviews.sqlite3", "/")]
+        for identity, candidate in self.read()["candidates"].items():
+            if (identity == "veritas-vol-2" or candidate.get("redirect_to")
+                    or candidate["kind"] != "release_candidate" or candidate["decision"] == "grouping"):
+                continue
+            database = (self.directory / "releases" / identity / "reviews.sqlite3").resolve()
+            if database.is_relative_to(self.directory / "releases"):
+                locations.append((database, f"/albums/{identity}/"))
+        result = []
+        for database, url in locations:
+            if not database.is_file():
+                continue
+            with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as connection:
+                row = connection.execute("SELECT payload FROM review WHERE id=1").fetchone()
+            saved = json.loads(row[0])
+            fields = saved["album"]["suggestions"] | saved["album"]["edits"]
+            result.append({"title": fields["title"], "category": fields["category"],
+                           "track_count": len(saved["tracks"]), "url": url})
+        return sorted(result, key=lambda review: review["title"].casefold())
 
     def decide(self, identity, decision):
         if decision not in {"review", "included", "skipped", "grouping"}:

@@ -11,7 +11,7 @@ resume goal-mode work or start the remaining features without the owner's reques
 | Operator step | Reviewed behavior |
 | --- | --- |
 | Scan | Read paginated Kivo records and form candidate groups; preserve earlier data when scans fail. A source grouping is not necessarily an album. |
-| Choose | Remember include/skip/grouping/review decisions and deliberately map source tracks to identified releases. |
+| Choose | Remember include/skip/grouping/review decisions and deliberately map source tracks to identified releases or named collections of official songs. |
 | Prepare | Fetch details, download/validate audio, read tags, retain original covers and make 400/800 px variants. Failed refreshes preserve valid files. |
 | Review | Save corrections per release, keep official numbering optional, and require Use/Keep decisions for changed source fields. |
 | Publish | Send album first, then selected tracks; reuse stable source identities and immutable media, and preserve play counts. |
@@ -49,7 +49,7 @@ and Java options, bypass loopback HTTP proxies, and target only the local Docker
 engine. Source media paths are normalized before copying into the separate review.
 These are verification-tool changes, not a new production environment.
 
-This run verifies backend/storage delivery, not a fresh frontend browser playback
+The chapter 17 run verifies backend/storage delivery, not a fresh frontend browser playback
 or real-R2/CORS check. Those limits remain explicit below.
 
 The verifier copies the prepared Veritas review and media, uses a new test release
@@ -64,6 +64,87 @@ ranges, but did not establish browser playback; its response lacked CORS
 allow-origin for `http://localhost:5173`. No production import is authorized by
 these checks.
 
+## Development R2 + frontend checkpoint — 2026-09-20
+
+The owner approved one bounded Veritas check after chapter 17. No new pipeline
+features were implemented; stop after this checkpoint.
+
+- Published the approved copied review to a new local PostgreSQL database,
+  `catalog_import_devcheck_20260920`, and the existing `bluearchive-music-dev`
+  R2 bucket. Fresh Flyway V1.1–V1.10 migration replay passed.
+- The existing `blue_archive_api` development database was backed up before
+  startup and upgraded from V1.8 to V1.10. Its 45 albums / 295 songs included
+  legacy Veritas records without import identities, so publication was redirected
+  to the separate empty database. Do not import over the legacy catalog until
+  identity backfill/rebuild is deliberately reviewed. No production was used.
+- Browser checks passed: 800 px album cover, 400 px player cover, vocal then
+  instrumental order, both tracks playing and advancing after seeking to ~2:31.
+  The actual audio URLs used the development R2 public domain.
+- A second publish returned `unchanged` for all three records. Album ID **1**,
+  song IDs **1/2**, source identities **255/256**, metadata revisions, media keys
+  and play counts **1/1** were preserved. Database totals stayed **1 album / 2 songs**.
+- All five complete public media objects matched the prepared SHA-256 hashes.
+  Their public ETag/Last-Modified values stayed the same across retry; these are
+  public delivery observations, not an independent origin-side bucket audit.
+- API CORS allowed `http://localhost:5173`. R2 responses still lacked an
+  allow-origin header. Native audio playback succeeded without `crossOrigin`,
+  so this does **not** establish fetch/Web Audio CORS support.
+- Both original SQLite files and all five original media files were unchanged.
+  Evidence, database backup and copied review are retained under ignored
+  `target/dev-r2-check-20260920/` (see `REPORT.md`). No tracked application code
+  or saved environment files changed.
+
+At handoff the app (`http://localhost:5173/library/albums/1`), copied review tool
+(`http://127.0.0.1:8770/`) and API (`http://127.0.0.1:18083`) remain running for
+manual inspection. Audio is paused. They use process-only environment overrides;
+ordinary launches do not automatically select this temporary database.
+
+## Fresh candidate check — initial pause, now resolved below
+
+On 2026-09-20 the owner deferred R2 CORS work until it causes a concrete blocker
+and requested continued testing. No bucket policy was changed.
+
+- Fresh Kivo scan in the copied workspace on port 8770 succeeded: 995 records,
+  112 candidate groups. Existing source reviews were not used as prepared input.
+- `Thanks to` tracks 197 (EN) and 198 (KR) downloaded and passed FFprobe/full
+  FFmpeg decode validation. Both are 3:57 MP3s; the original cover and 400/800
+  derivatives are ready locally. Media tags contain no usable credit metadata.
+- Stopped before publication: Kivo describes an official YouTube-only song with
+  no album/streaming release. The [Nexon announcement](https://www.nexongames.co.kr/bbs/board.php?bo_table=media_event_en&wr_id=190)
+  confirms an official anniversary song, but does not establish a two-track album
+  or digital-single release. Bounded research did not resolve that identity;
+  absence of a found listing is not proof that no release exists.
+- Candidate returned to `review`; prepared files retained, both publication
+  selections off. No category, release date, official numbering or credits were
+  invented. GameKee has no matched reference for this candidate, not a new
+  confirmed HTTP 567 failure.
+- The decision needed at that checkpoint was whether to keep this candidate pending under the then-current
+  identified-release rule, or explicitly include official video-only songs and
+  decide how to represent them. Do not silently expand catalog scope.
+- Saved draft: `http://127.0.0.1:8770/albums/d7f743d6-1cf3-48fa-886a-a1da0df10a68/`.
+  Local evidence: `target/fresh-release-20260920/REPORT.md`. No new publication,
+  PostgreSQL/R2 writes, application-code changes or commit in this check.
+
+## Owner decision — rebuild through the new pipeline
+
+On 2026-09-20 the owner chose a fresh catalog rebuild through the new pipeline
+instead of matching old database rows to Kivo IDs. Keep the old database and its
+backup untouched; this direction is not permission to delete data or switch production.
+The separate development-check database currently contains only the published
+Veritas sample, not a completed replacement catalog.
+
+Official songs do not need a formal album release to qualify. `Thanks to` is
+included in the local review under `Official songs`, with EN/KR versions grouped
+for browsing. The existing album container can hold this collection without
+claiming an official two-track album. Its notes explain that distinction; release
+date and official disc/track numbers remain blank. No schema change is needed.
+Both prepared tracks remain unselected for publication; nothing new was published.
+
+Next bounded step: review the saved `Thanks to` draft and, with publication
+approval, verify it in the development catalog. Broad source groups still do not
+automatically become albums. Some tool labels still say “album” or “official
+release”; do not interpret those labels as a formal-album eligibility restriction.
+
 ## What remains — discuss before implementing
 
 1. Reliable GameKee retrieval/matching and broader source-reader validation.
@@ -71,18 +152,21 @@ these checks.
    manual-reference fallback rather than claiming unattended reliability.
 2. Structured character/voice-actor credits, aliases and credit-aware search.
    Existing reviewed names/roles work, but they do not complete searchable identities.
-3. Representative release checks and a backed-up catalog rebuild/migration plan.
-   One Veritas sample does not establish whole-catalog correctness. Do not delete
-   existing records or media without a separately reviewed replacement plan.
-4. Complete development-R2 CORS/public-URL and frontend playback verification.
-   MinIO HTTP ranges prove media delivery, not the actual browser player or R2 setup.
+3. Representative checks and a fresh catalog rebuild using the new pipeline,
+   not legacy source-ID backfill. One Veritas sample does not establish
+   whole-catalog correctness. Review a replacement/cutover plan separately before
+   deleting existing records/media or replacing the active production catalog.
+4. Development-R2 CORS is deferred by the owner until a concrete need/blocker.
+   Public URLs, native frontend playback and seeking pass for Veritas; they do
+   not prove fetch/Web Audio CORS support. Revisit when that access is needed.
 
 After the pipeline and catalog stage: Google sign-in/private libraries, then
 AWS/domain launch. Those are later stages, not part of chapter 17.
 
 ## Boundaries to preserve
 
-- Official identified releases, including singles; broad source groups are not albums.
+- Official releases and official standalone songs are eligible. Named browsing
+  collections need not claim a formal album; broad source groups are not automatically albums.
 - Drama remains excluded; missing tracks stay visible and can remain unselected.
 - Credits cover artists/groups, composers and character/CV pairs, not lyricists.
 - Human approval to include, prepare or save never implies approval to publish.

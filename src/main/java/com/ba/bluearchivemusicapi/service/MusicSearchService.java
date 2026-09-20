@@ -13,6 +13,7 @@ import java.util.List;
 @AllArgsConstructor
 public class MusicSearchService {
     private static final int RESULT_LIMIT = 5;
+    private static final int QUERY_LIMIT = 255;
 
     private final AlbumRepository albumRepository;
 
@@ -21,7 +22,10 @@ public class MusicSearchService {
     private final MusicSearchMapper musicSearchMapper;
 
     public MusicSearchResponseDTO search(String searchQuery) {
-        String query = searchQuery.trim();
+        String query = searchQuery.strip();
+        if (query.length() > QUERY_LIMIT) {
+            throw new IllegalArgumentException("Search query must be at most 255 characters.");
+        }
         MusicSearchResponseDTO response = new MusicSearchResponseDTO();
 
         if (query.isEmpty()) {
@@ -31,9 +35,9 @@ public class MusicSearchService {
         }
 
         response.setAlbums(musicSearchMapper.toAlbumSearchResults(
-                albumRepository.searchByTitle(query, RESULT_LIMIT)));
+                albumRepository.searchCatalog(query, RESULT_LIMIT)));
         response.setSongs(musicSearchMapper.toSongSearchResults(
-                songRepository.searchByTitle(query, RESULT_LIMIT)));
+                songRepository.searchCatalog(query, RESULT_LIMIT)));
         return response;
     }
 }

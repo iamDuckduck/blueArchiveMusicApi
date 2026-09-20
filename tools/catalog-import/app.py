@@ -10,7 +10,7 @@ from werkzeug.local import LocalProxy
 
 from service import ReviewService
 from store import Store, find_track
-from publisher import Publisher
+from publisher import Publisher, needs_media_refresh
 from catalog import Catalog
 
 
@@ -140,6 +140,7 @@ def create_app(data_dir=None, backend_url="http://127.0.0.1:8080", api_key=None)
 
     @app.get("/api/review")
     def review():
+        catalog.sync_review(store)
         return jsonify(current_view())
 
     @app.put("/api/review")
@@ -179,7 +180,12 @@ def create_app(data_dir=None, backend_url="http://127.0.0.1:8080", api_key=None)
         track = find_track(store.read(), track_id)
         if included and (track["suggestions"] | track["edits"])["kind"] == "drama":
             raise ValueError("Spoken drama is excluded. Correct its music type first if it was misclassified.")
-        store.update(lambda s: find_track(s, track_id).update(included=included))
+        def save_inclusion(state):
+            row = find_track(state, track_id)
+            row["included"] = included
+            if not included:
+                row["publish_selected"] = False
+        store.update(save_inclusion)
         return jsonify(current_view())
 
     @app.post("/api/tracks/<track_id>/publication")
@@ -196,11 +202,15 @@ def create_app(data_dir=None, backend_url="http://127.0.0.1:8080", api_key=None)
         if selected and (not track["included"] or track["media"]["status"] != "ready"
                          or (track["suggestions"] | track["edits"])["kind"] == "drama"):
             raise ValueError("Select only included, prepared music for publication.")
+        if selected and (track.get("pending_index") or needs_media_refresh(track)):
+            raise ValueError("Source information changed. Reload details and prepare changed audio before selecting this track.")
         store.update(lambda s: find_track(s, track_id).update(publish_selected=selected))
         return jsonify(current_view())
 
     @app.post("/api/jobs/<action>")
     def job(action):
+        if action == "publish":
+            catalog.sync_review(store)
         service.start(action)
         return jsonify(current_view()), 202
 

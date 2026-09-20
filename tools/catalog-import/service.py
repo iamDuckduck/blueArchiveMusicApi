@@ -99,13 +99,18 @@ class ReviewService:
         saved_text = (previous.get("text") or previous.get("cached_text")) if previous.get("url", page_url) == page_url else None
         if result["status"] == "failed" and saved_text:
             result["cached_text"] = saved_text
+            result["cached_checked_at"] = previous.get("cached_checked_at") or previous.get("checked_at")
+            if previous.get("evidence") or previous.get("cached_evidence"):
+                result["cached_evidence"] = previous.get("evidence") or previous.get("cached_evidence")
         self.store.update(lambda s: s.update(gamekee=result))
 
     def prepare(self, force=False):
         self.fetch_tracks(only_missing=not force)
         self.fetch_gamekee()
         state = self.store.read()
-        cover_url = next((t["source"].get("cover") for t in state["tracks"] if t["source"] and t["source"].get("cover")), "")
+        cover_url = next((t["source"].get("cover") for t in state["tracks"]
+                          if t["included"] and t["source_id"] is not None
+                          and t["source"] and t["source"].get("cover")), "")
         previous_cover = state["album"]["cover"]
         self.message("Preparing the original cover and smaller display copies…")
         self.store.update(lambda s: s["album"].update(cover={"status":"running", "previous":previous_cover}))

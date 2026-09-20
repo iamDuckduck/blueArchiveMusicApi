@@ -121,8 +121,20 @@ class Store:
     def _recover(state):
         state.setdefault("publication", {"status": "pending", "message": "Not published."})
         state["album"]["suggestions"].setdefault("gamekee_url", state["gamekee"].get("url", ""))
+        state["album"]["suggestions"].setdefault("gamekee_notes", "")
+        publication = state["publication"]
+        attempts = publication.get("attempt", {}).get("records", [])
+        if (publication.get("status") == "running"
+                or any(item["status"] == "sending" for item in attempts)
+                or (state["job"].get("running") and state["job"].get("action") == "publish")):
+            for item in attempts:
+                if item["status"] == "sending":
+                    item["status"] = "unconfirmed"
+            publication.update(status="interrupted", message=(
+                "Publication was interrupted. An unconfirmed request may already be saved. "
+                "Check published state or retry with the same identities; earlier successes are retained."))
         if state["job"].get("running"):
-            state["job"] = {"running": False, "message": "Preparation was interrupted. Retry to continue."}
+            state["job"] = {"running": False, "message": "Local task was interrupted. Check the saved results before retrying."}
         for item in [state["album"]["cover"], *(t["media"] for t in state["tracks"])]:
             if item["status"] == "running":
                 previous = item.pop("previous", {})
@@ -161,7 +173,7 @@ class Store:
         return state
 
     def save_edits(self, payload):
-        album_fields = {"title", "category", "release_date", "notes", "gamekee_url"}
+        album_fields = {"title", "category", "release_date", "notes", "gamekee_url", "gamekee_notes"}
 
         def mutate(state):
             album = payload.get("album", {})

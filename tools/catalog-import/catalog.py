@@ -170,7 +170,7 @@ class Catalog:
             if candidate.get("redirect_to"):
                 raise ValueError("This source label is linked to an existing release. Review that release instead.")
             if decision == "included" and candidate["kind"] in {"source_grouping", "unresolved"}:
-                raise ValueError("Identify an official release for these tracks first; a source grouping is not an album.")
+                raise ValueError("Identify the official music and create a named collection first; a broad source grouping is not automatically an album.")
             candidate.update(decision=decision, reviewed_at=now())
         return self.update(mutate)
 
@@ -186,9 +186,9 @@ class Catalog:
         title, category = payload.get("title"), payload.get("category")
         reference = payload.get("reference", "")
         if not all(isinstance(v, str) and v.strip() and len(v) <= 255 for v in [title, category]):
-            raise ValueError("Enter an identified official release title and category (up to 255 characters).")
+            raise ValueError("Enter an album, single, or collection title and category (up to 255 characters).")
         if payload.get("official") is not True:
-            raise ValueError("Confirm this is an identified official release.")
+            raise ValueError("Confirm this collection contains identified official music, not just a broad source label.")
         if not isinstance(reference, str) or len(reference) > 2000:
             raise ValueError("Invalid release reference.")
         if reference and (urlparse(reference).scheme != "https" or not urlparse(reference).hostname or urlparse(reference).username):
@@ -271,7 +271,7 @@ class Catalog:
         if candidate.get("redirect_to"):
             raise ValueError("This source label is linked to another release. Open the target release.")
         if candidate["kind"] != "release_candidate" or candidate["decision"] == "grouping":
-            raise ValueError("This is a source grouping or unidentified release, not an approved album candidate.")
+            raise ValueError("This is a broad or unidentified source group. Create a named collection for identified official music, then map its tracks.")
         label = candidate["source_album"]
         category = candidate.get("category") or next((name for name in ["青春あんさんぶる", "絆ダイアローグ", "OST"] if name in label), "")
         initial = {"album": {"id": identity, "decision": candidate["decision"],
@@ -320,6 +320,7 @@ class Catalog:
                 elif tracks[identity]["index"] != record:
                     track = tracks[identity]
                     track["pending_index"] = record
+                    track["publish_selected"] = False
                     track["index_warning"] = "Source index changed. Compare the incoming record and explicitly reload details; saved corrections are retained."
                 else:
                     tracks[identity].pop("pending_index", None)

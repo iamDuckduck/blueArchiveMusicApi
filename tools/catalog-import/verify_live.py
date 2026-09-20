@@ -208,7 +208,7 @@ def verify(source_review):
         try:
             report["migrations"] = sql("SELECT string_agg(version, ',' ORDER BY installed_rank) "
                                        "FROM flyway_schema_history WHERE success")
-            assert report["migrations"].split(",") == [f"1.{number}" for number in range(1, 11)]
+            assert report["migrations"].split(",") == [f"1.{number}" for number in range(1, 12)]
 
             def lose_response(*a, **kw):
                 response = real_put(*a, **kw)

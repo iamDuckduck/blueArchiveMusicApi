@@ -4,6 +4,7 @@ import com.ba.bluearchivemusicapi.dtos.catalog.CatalogAlbumImportDTO;
 import com.ba.bluearchivemusicapi.dtos.catalog.CatalogImportResultDTO;
 import com.ba.bluearchivemusicapi.dtos.catalog.CatalogTrackImportDTO;
 import com.ba.bluearchivemusicapi.dtos.catalog.CatalogImportStateDTO;
+import com.ba.bluearchivemusicapi.dtos.catalog.CatalogPerformerDTO;
 import com.ba.bluearchivemusicapi.common.exception.CatalogConflictException;
 import com.ba.bluearchivemusicapi.entities.*;
 import com.ba.bluearchivemusicapi.repositories.AlbumRepository;
@@ -21,6 +22,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.LinkedHashSet;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 
@@ -109,6 +111,7 @@ public class CatalogImportService {
         validateIdentity(source, sourceAlbumId);
         validateIdentityPart(sourceTrackId);
         if (!KINDS.contains(input.kind())) throw new IllegalArgumentException("Unknown music kind");
+        validatePerformers(input);
         Album album = albumRepository.findImportForUpdate(source, sourceAlbumId)
                 .orElseThrow(() -> new IllegalArgumentException("Publish the album before its tracks"));
         Song song = songRepository.findImportForUpdate(
@@ -118,7 +121,11 @@ public class CatalogImportService {
         CatalogImportStateDTO current = snapshots.track(song);
         CatalogImportStateDTO desired = snapshots.state(album.getId(), current.songId(), CatalogImportSnapshot.trackFields(input),
                 CatalogImportSnapshot.trackMedia(mediaStorage.keyFor(audio, audioKey), album.getCover400Path()));
-        if (publicationDecision(current, desired, expectedRevision) == PublicationDecision.UNCHANGED) {
+        PublicationDecision decision = publicationDecision(current, desired, expectedRevision);
+        // Profile/search enrichment is separate from a song's content revision.
+        // Check stale edits first, then also enrich identical legacy retries.
+        enrichPerformerProfiles(input);
+        if (decision == PublicationDecision.UNCHANGED) {
             return result(current, false, "unchanged");
         }
         if (created) song = new Song();
@@ -186,6 +193,53 @@ public class CatalogImportService {
     private Artist findOrCreateArtist(String name) {
         return artistRepository.findByName(name)
                 .orElseGet(() -> artistRepository.save(Artist.builder().name(name).build()));
+    }
+
+    private void validatePerformers(CatalogTrackImportDTO input) {
+        if (input.performers() == null) return;
+        if (input.performers().size() > 100) throw new IllegalArgumentException("Supply up to 100 performer credits");
+        for (var performer : input.performers()) {
+            if (performer == null) throw new IllegalArgumentException("A performer credit must contain named fields");
+            if (performer.displayName().length() > 255) {
+                throw new IllegalArgumentException("A combined character / voice actor credit must fit within 255 characters");
+            }
+        }
+    }
+
+    private void enrichPerformerProfiles(CatalogTrackImportDTO input) {
+        if (input.performers() == null) return;
+        // Shared profiles are locked in a consistent order across album imports.
+        for (var performer : input.performers().stream()
+                .sorted(Comparator.comparing(CatalogPerformerDTO::displayName)).toList()) {
+            String name = performer.displayName();
+            if (name.isBlank()) continue;
+            // Reuse only an exact reviewed display name. Do not split old labels
+            // or use aliases to guess that two identities are the same person.
+            Artist artist = artistRepository.findProfileForUpdate(name)
+                    .orElseGet(() -> artistRepository.save(Artist.builder().name(name).build()));
+            String character = normalizedName(performer.character());
+            String voiceActor = normalizedName(performer.voiceActor());
+            if (contradicts(artist.getCharacterName(), character) || contradicts(artist.getVoiceActorName(), voiceActor)) {
+                throw new IllegalArgumentException("Structured credit disagrees with saved artist '" + name + "'. Review the credited identity before importing.");
+            }
+            String savedCharacter = normalizedName(artist.getCharacterName());
+            String savedVoiceActor = normalizedName(artist.getVoiceActorName());
+            String nextCharacter = savedCharacter == null ? character : savedCharacter;
+            String nextVoiceActor = savedVoiceActor == null ? voiceActor : savedVoiceActor;
+            if (!new CatalogPerformerDTO(nextCharacter, nextVoiceActor).displayName().equals(name)) {
+                throw new IllegalArgumentException("Character and voice actor fields would change the identity of saved artist '" + name + "'. Review the credited identity before importing.");
+            }
+            artist.setCharacterName(nextCharacter);
+            artist.setVoiceActorName(nextVoiceActor);
+        }
+    }
+
+    private static boolean contradicts(String saved, String incoming) {
+        return normalizedName(saved) != null && incoming != null && !saved.strip().equals(incoming);
+    }
+
+    private static String normalizedName(String name) {
+        return name == null || name.isBlank() ? null : name.strip();
     }
 
     private void validateIdentity(String source, String sourceAlbumId) {

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Credit aliases · Blue Archive Music</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='review.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='credits.css') }}">
+  <script src="{{ url_for('static', filename='credits.js') }}" defer></script>
+</head>
+<body data-credits-enabled="{{ 'true' if credits_enabled else 'false' }}">
+  <aside class="sidebar"><a class="brand" href="/">Blue Archive Music</a><a class="nav-item" href="/catalog">Album discovery</a><a class="nav-item active" href="/credits">Credit aliases</a><a class="nav-item" href="/">Saved Veritas review</a><div class="sidebar-note">After publication<p>Alias changes are saved directly to the configured backend.</p></div></aside>
+  <main class="catalog-page"><header class="topbar"><span>Catalog / Credit aliases</span><a href="/catalog">Back to discovery</a></header><div class="page-content">
+    <span class="eyebrow">AFTER PUBLICATION</span><h1>Make credits easier to find.</h1>
+    <p>Add alternate spellings or language names to an existing published credit. Aliases improve music search; they do not rename or merge people, change song credits, or edit a local import draft.</p>
+    <p class="helper credit-destination">Backend destination: <strong>{{ backend_url }}</strong></p>
+    {% if not credits_enabled %}<p class="credit-warning">Alias editing is unavailable. Restart this local tool with the development backend URL and import API key; never put the key in this page.</p>{% endif %}
+    <p id="notice" role="status" aria-live="polite" hidden></p>
+    <div class="credit-layout">
+      <section class="panel"><h2>1 · Find a published credit</h2><form id="credit-search"><label>Canonical name<input id="credit-query" type="search" maxlength="255" placeholder="For example, Younha or Veritas"></label><button class="button secondary" id="search-credits" type="submit">Search profiles</button></form><p class="helper">Search names, not aliases. Leave blank to list up to 50 profiles. If one is missing, publish its reviewed track credits first.</p><p id="search-status" role="status"></p><ul id="credit-results" aria-label="Matching credit profiles"></ul></section>
+      <section class="panel"><h2>2 · Edit this profile's aliases</h2><p id="credit-empty" class="helper">Choose a profile from the results. Check its name and character / voice actor before editing.</p>
+        <form id="credit-editor" hidden><h3 id="credit-name"></h3><p id="credit-identity" class="helper"></p><dl id="credit-context"></dl><label>Aliases · one name per line<textarea id="credit-aliases" rows="7" placeholder="An alternate spelling or name in another language"></textarea></label><p class="helper">Up to 20 names, 255 characters each. Save replaces this profile's alias list; an empty list removes its aliases, not the profile.</p><div class="album-actions"><button class="button primary" id="save-aliases" type="submit" disabled>Save aliases to backend</button><button class="button quiet" id="reset-aliases" type="button" disabled>Discard local edits</button></div><p id="alias-status" role="status" class="helper"></p></form>
+      </section>
+    </div>
+  </div></main>
+</body>
+</html>

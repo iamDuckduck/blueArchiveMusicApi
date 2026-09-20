@@ -28,6 +28,7 @@ public interface AlbumRepository extends JpaRepository<Album,Long> {
            "WHERE a.id = :albumId")
     Album findAlbumWithSongListById(Long albumId);
 
+    // An album matches a credited identity only through one of its own songs.
     @Query(value = """
             SELECT
                 a.id,
@@ -36,12 +37,28 @@ public interface AlbumRepository extends JpaRepository<Album,Long> {
             FROM album a
             WHERE a.title ILIKE :query || '%'
                OR a.title % :query
+               OR EXISTS (
+                   SELECT 1
+                   FROM song s
+                   JOIN song_artist sa ON sa.song_id = s.id
+                   JOIN artist ar ON ar.id = sa.artist_id
+                   WHERE s.album_id = a.id
+                     AND (ar.name ILIKE :query || '%' OR ar.name % :query
+                       OR ar.character_name ILIKE :query || '%' OR ar.character_name % :query
+                       OR ar.voice_actor_name ILIKE :query || '%' OR ar.voice_actor_name % :query
+                       OR EXISTS (
+                           SELECT 1 FROM artist_alias aa
+                           WHERE aa.artist_id = ar.id
+                             AND (aa.alias ILIKE :query || '%' OR aa.alias % :query)
+                       ))
+               )
             ORDER BY
-                CASE WHEN a.title ILIKE :query || '%' THEN 0 ELSE 1 END,
-                similarity(a.title, :query) DESC
+                CASE WHEN a.title ILIKE :query || '%' THEN 0 WHEN a.title % :query THEN 1 ELSE 2 END,
+                similarity(a.title, :query) DESC,
+                a.id
             LIMIT :limit
             """, nativeQuery = true)
-    List<AlbumSearchProjection> searchByTitle(
+    List<AlbumSearchProjection> searchCatalog(
             @Param("query") String query,
             @Param("limit") int limit);
 }

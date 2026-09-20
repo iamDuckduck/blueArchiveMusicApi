@@ -1,0 +1,33 @@
+# Standalone verification profile. Run through tools/catalog-import/verify_live.py
+# so inherited environment variables cannot redirect these local destinations.
+server:
+  address: 127.0.0.1
+  port: 18082
+spring:
+  docker:
+    compose:
+      enabled: false
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:15433/catalog_import_verify
+    username: catalog_verify
+    password: catalog-verify-local-only
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    show-sql: false
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: none
+  flyway:
+    enabled: true
+    baseline-on-migrate: false
+app:
+  catalog-media:
+    mode: r2
+  cors:
+    allowed-origins: http://127.0.0.1:15173
+cloudflare:
+  r2:
+    endpoint: http://127.0.0.1:19000
+    accessKey: catalog_verify
+    secretKey: catalog-verify-local-only
+    bucket: catalog-import-verify

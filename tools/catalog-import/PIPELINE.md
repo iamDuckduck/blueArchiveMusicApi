@@ -1,10 +1,50 @@
 # Catalog import — reviewed progress
 
-Updated: 2026-09-20. Branch: `review/catalog-import-approved`.
+Updated: 2026-09-20. Follow-up branch: `feature/catalog-pipeline-finish`.
 
-The owner-led backend review covers [chapters 1–17](HISTORY.md). The general
-pipeline is still unfinished. Stop after this verification checkpoint; do not
-resume goal-mode work or start the remaining features without the owner's request.
+The owner-led backend review covers [chapters 1–17](HISTORY.md), retained on
+`review/catalog-import-approved`. The owner subsequently authorized finishing the
+pipeline while away and keeping next-stage work on another branch. The manual-review
+pipeline checkpoint below is ready for review; unattended GameKee retrieval and
+whole-catalog validation are not claimed complete.
+
+## Start here — pipeline follow-up checkpoint
+
+- Category agreed for `Thanks to`: **Blue Archive Global songs**, saved in the
+  owner's local draft. EN/KR versions remain a named collection, not a claimed album.
+- The tool now shows Scan → Include → Prepare → Review → Publish, with a concrete
+  next action, optional-reference status and publication readiness. Dark theme retained.
+- Source readers validate identities/response shapes and expose conservative
+  evidence. GameKee metadata is readable, but full article CDN access still returns
+  HTTP 567. Partial summaries are not treated as full articles; manual reference
+  notes and same-reference cached evidence remain usable.
+- Changed source indexes clear publication selections, including rescans from
+  another tab. Changed audio URLs require preparation before publication. Excluded
+  tracks cannot supply the cover. Required fields are checked before uploads.
+- Interrupted publishing marks in-flight requests unconfirmed, preserves receipts
+  and earlier successes, and tells the operator to check/retry the same identity.
+- **128 Python tests + 5 JavaScript comparison tests passed.** JavaScript syntax
+  checks passed. Backend build: 19 passed, 1 opt-in real-R2 test skipped.
+- Full Veritas PostgreSQL/MinIO retry verification passed again:
+  `target/catalog-live-20260920-200114/report.json` (album 8, songs 14/15).
+- Non-album candidate verification passed using a disposable `Thanks to` copy:
+  `target/catalog-candidate-20260920-200708-436524a6/report.json` (album 9, songs 16/17).
+  Reopening the copied review and publishing again preserved IDs/revisions/counts
+  and object timestamps. Source SQLite and all five media SHA-256 hashes stayed unchanged.
+- Browser at `http://127.0.0.1:15173/library/albums/9` displayed the category,
+  artwork and both versions; both advanced in playback from local MinIO. Player paused.
+  Screenshot: `target/pipeline-check-20260920/thanks-to-playback.png`.
+
+This run did **not** publish `Thanks to` to development R2, delete old data, import
+the whole catalog, or change production. The owner draft on port 8770 still has
+both publication selections off. Development app/API on 5173/18083 still use the
+separate Veritas development-check database and development R2. The additional
+15173/18082 preview uses the local verification database/MinIO, not that app's data.
+
+Read [the short operator guide](OPERATOR-GUIDE.md) before command-level setup.
+Next implementation stage: structured credits, aliases and credit-aware search,
+kept on `feature/catalog-credits-search`. Catalog rebuild/review then follows;
+Google sign-in/private libraries and AWS/domain launch remain later work.
 
 ## What is implemented
 
@@ -134,22 +174,23 @@ The separate development-check database currently contains only the published
 Veritas sample, not a completed replacement catalog.
 
 Official songs do not need a formal album release to qualify. `Thanks to` is
-included in the local review under `Official songs`, with EN/KR versions grouped
+included in the local review under `Blue Archive Global songs` (the owner's later
+category choice), with EN/KR versions grouped
 for browsing. The existing album container can hold this collection without
 claiming an official two-track album. Its notes explain that distinction; release
 date and official disc/track numbers remain blank. No schema change is needed.
 Both prepared tracks remain unselected for publication; nothing new was published.
 
-Next bounded step: review the saved `Thanks to` draft and, with publication
-approval, verify it in the development catalog. Broad source groups still do not
-automatically become albums. Some tool labels still say “album” or “official
-release”; do not interpret those labels as a formal-album eligibility restriction.
+An isolated test copy has since been verified as recorded above. Review the saved
+`Thanks to` draft before publishing it to the ordinary development catalog. Broad
+source groups still do not automatically become albums. Current labels distinguish
+official-song collections from formal albums without changing the backend container.
 
-## What remains — discuss before implementing
+## Remaining limits and next stage
 
-1. Reliable GameKee retrieval/matching and broader source-reader validation.
-   The previously sampled GameKee request returned HTTP 567; keep the visible
-   manual-reference fallback rather than claiming unattended reliability.
+1. GameKee full-content access is externally blocked (HTTP 567); matching remains
+   an explicit operator-selected reference. The manual path works, but do not
+   claim unattended retrieval or catalog-wide source coverage.
 2. Structured character/voice-actor credits, aliases and credit-aware search.
    Existing reviewed names/roles work, but they do not complete searchable identities.
 3. Representative checks and a fresh catalog rebuild using the new pipeline,

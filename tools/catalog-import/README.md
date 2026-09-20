@@ -1,7 +1,8 @@
 # Local catalog review
 
-Reviewed branch: `review/catalog-import-approved`. See [progress and remaining
-work](PIPELINE.md) and the [17-chapter reading guide](HISTORY.md).
+Reviewed base: `review/catalog-import-approved`. Follow-up work is on
+`feature/catalog-pipeline-finish`. Start with the [short operator guide](OPERATOR-GUIDE.md),
+then [progress and remaining work](PIPELINE.md) or the [17-chapter reading guide](HISTORY.md).
 
 Requires Python 3.11+, FFmpeg and FFprobe on PATH. From this directory:
 
@@ -10,10 +11,10 @@ python -m pip install -r requirements.txt
 python app.py
 ```
 
-Open http://127.0.0.1:8765. Load Kivo details, include the Veritas album,
-prepare its audio and artwork, review the source evidence and edit the credits.
-Save changes to keep your corrections across restarts. The page previews the
-validated audio and keeps the spoken drama reference excluded.
+Open http://127.0.0.1:8765/catalog. Scan Kivo, choose an official release or
+official-song collection, prepare selected tracks, then save your review.
+Preparation and saving are local; publication is a separate action. The original
+Veritas sample remains at `/`. Spoken drama is excluded.
 
 Fetching reads source metadata and file URLs. Preparation downloads and validates
 those files, reads embedded tags and creates 400/800 px cover copies. GameKee
@@ -191,6 +192,25 @@ frontend player works. Current results and limitations are recorded in
 
 ## Reviewed import API (chapter 6)
 
+### Verify another prepared candidate locally
+
+After starting the same fixed PostgreSQL/MinIO services above, use:
+
+```powershell
+python tools/catalog-import/verify_candidate.py --review '<prepared candidate review directory>' --tracks 197 198
+```
+
+This creates a disposable verification copy and publishes only to the fixed local
+test environment. `--tracks` selects test inputs; it does not change the owner's
+publication checkboxes or authorize development-R2 publication. The source review
+must be included, prepared and free of unresolved source changes. Reports and
+copies remain in `target/catalog-candidate-*/`. The verifier checks persisted
+retries, no duplicate records/media, category, optional numbering and public media
+delivery. It stops its owned backend and leaves test data for inspection.
+
+Browser playback is a separate check. The 2026-09-20 `Thanks to` check passed in
+the existing frontend against this local test environment; see [progress](PIPELINE.md).
+
 Set `ADMIN_API_KEY` in the backend environment. Calls require that value in the
 `X-Admin-Api-Key` header. Publish the album before its tracks:
 
@@ -313,7 +333,10 @@ they are not automatically included for preparation or selected for publication.
 
 ## Map release appearances
 
-Create an identified official release and map selected source tracks into it. The same recording can have separate album appearances. Link renamed source labels to existing releases without discarding saved reviews.
+Create an identified official release or named collection of official songs and
+map selected source tracks into it. A formal album is not required, and unknown
+dates/numbers stay blank. The same recording can have separate album appearances.
+Link renamed source labels to existing releases without discarding saved reviews.
 
 ## Refresh source and media
 

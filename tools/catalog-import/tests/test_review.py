@@ -155,6 +155,56 @@ class MediaTests(unittest.TestCase):
             prepare_audio(self.root, 255, "https://static.kivo.wiki/test.mp3", first)
             self.assertEqual(download.call_count, 2)
 
+    def test_same_url_audio_refresh_validates_before_replacing_and_reuses_unchanged_bytes(self):
+        content = b"first validated audio"
+        def download(url, target, limit):
+            target.write_bytes(content)
+        def inspect(path):
+            if path.read_bytes() == b"invalid":
+                raise ValueError("Full decode failed")
+            return {"tags":{}, "sha256":digest(path), "duration":1}
+        url = "https://static.kivo.wiki/test.mp3"
+        with patch("media.download", side_effect=download) as get, patch("media.inspect_audio", side_effect=inspect):
+            first = prepare_audio(self.root, 1, url, {})
+            old = self.root / first["path"]
+            timestamp = old.stat().st_mtime_ns
+            same = prepare_audio(self.root, 1, url, first, force=True)
+            self.assertEqual(same["path"], first["path"])
+            self.assertEqual(old.stat().st_mtime_ns, timestamp)
+            content = b"invalid"
+            with self.assertRaisesRegex(ValueError, "Full decode"):
+                prepare_audio(self.root, 1, url, first, force=True)
+            self.assertEqual(digest(old), first["sha256"])
+            content = b"different validated audio"
+            changed = prepare_audio(self.root, 1, url, first, force=True)
+            self.assertNotEqual(changed["path"], first["path"])
+            self.assertEqual(digest(old), first["sha256"])
+            self.assertEqual(digest(self.root / changed["path"]), changed["sha256"])
+            self.assertEqual(get.call_count, 4)
+        self.assertEqual(list((self.root / "media" / "1").glob(".prepare-*")), [])
+
+    def test_cover_refresh_preserves_original_and_all_variants_on_failure(self):
+        color = "blue"
+        def download(url, target, limit):
+            if color == "invalid":
+                target.write_bytes(b"not an image")
+            else:
+                Image.new("RGB", (900, 600), color).save(target)
+        url = "https://static.kivo.wiki/cover.jpg"
+        with patch("media.download", side_effect=download):
+            first = prepare_cover(self.root, url, {})
+            timestamps = {k:(self.root / f["path"]).stat().st_mtime_ns for k,f in first["files"].items()}
+            self.assertEqual(prepare_cover(self.root, url, first, force=True), first)
+            color = "invalid"
+            with self.assertRaises(OSError):
+                prepare_cover(self.root, url, first, force=True)
+            color = "red"
+            second = prepare_cover(self.root, url, first, force=True)
+            for key, item in first["files"].items():
+                self.assertEqual(digest(self.root / item["path"]), item["sha256"])
+                self.assertEqual((self.root / item["path"]).stat().st_mtime_ns, timestamps[key])
+                self.assertNotEqual(second["files"][key]["path"], item["path"])
+
     @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "FFmpeg is not installed")
     def test_html_named_mp3_fails_real_audio_validation(self):
         bad = self.root / "bad.mp3"
@@ -194,10 +244,48 @@ class ServiceTests(unittest.TestCase):
 
     def test_repeated_gamekee_failures_keep_last_successful_text(self):
         self.store.update(lambda s: s.update(gamekee={"status": "ready", "text": "Saved credits"}))
-        with patch("sources.fetch_gamekee", side_effect=lambda: {"status": "failed", "error": "567"}):
+        with patch("sources.fetch_gamekee", side_effect=lambda url: {"status": "failed", "error": "567"}):
             self.service.fetch_gamekee(force=True)
             self.service.fetch_gamekee(force=True)
         self.assertEqual(self.store.read()["gamekee"]["cached_text"], "Saved credits")
+
+    def test_refresh_retains_failed_files_and_only_changed_media_needs_reselection(self):
+        old = {"status":"ready", "sha256":"old", "path":"media/255/old.mp3", "tags":{}}
+        cover = {"status":"ready", "files":{"400":{"sha256":"old cover"}}}
+        def ready(state):
+            state["album"].update(decision="included", cover=cover)
+            for row in state["tracks"]:
+                if row["source_id"]:
+                    row.update(source=record(row["source_id"]), media=old, publish_selected=True)
+        self.store.update(ready)
+        with patch("sources.fetch_kivo", side_effect=record), patch.object(self.service, "fetch_gamekee"), \
+                patch("media.prepare_cover", side_effect=ValueError("Invalid replacement cover")), \
+                patch("media.prepare_audio", side_effect=ValueError("Invalid replacement audio")):
+            self.service.prepare(force=True)
+        failed = self.store.read()
+        self.assertEqual(failed["album"]["cover"]["status"], "ready")
+        self.assertIn("Invalid replacement", failed["album"]["cover"]["error"])
+        self.assertEqual(find_track(failed, 255)["media"]["path"], old["path"])
+        self.assertTrue(find_track(failed, 255)["publish_selected"])
+        def prepare(root, track_id, url, previous, force=False):
+            self.assertTrue(force)
+            return old | {"sha256":"new", "path":"media/255/new.mp3"} if track_id == "255" else old
+        with patch("sources.fetch_kivo", side_effect=record), patch.object(self.service, "fetch_gamekee"), \
+                patch("media.prepare_cover", return_value=cover), patch("media.prepare_audio", side_effect=prepare):
+            self.service.prepare(force=True)
+        changed = self.store.read()
+        self.assertFalse(find_track(changed, 255)["publish_selected"])
+        self.assertTrue(find_track(changed, 256)["publish_selected"])
+        self.assertEqual(find_track(changed, 255)["media_history"][0]["path"], old["path"])
+
+    def test_restart_during_refresh_restores_previous_validated_media(self):
+        previous = {"status":"ready", "path":"media/255/good.mp3", "sha256":"good"}
+        self.store.update(lambda s: find_track(s, 255).update(media={"status":"running", "previous":previous}))
+        self.store.update(lambda s: s["album"].update(cover={"status":"running", "previous":{"status":"ready", "files":{"400":{}}}}))
+        restarted = Store(self.temp.name).view()
+        self.assertEqual(find_track(restarted, 255)["media"]["path"], previous["path"])
+        self.assertEqual(find_track(restarted, 255)["media"]["status"], "ready")
+        self.assertEqual(restarted["album"]["cover"]["status"], "ready")
 
     def test_duplicate_jobs_are_rejected_and_gamekee_is_cached(self):
         entered, release = threading.Event(), threading.Event()

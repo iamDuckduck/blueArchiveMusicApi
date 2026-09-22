@@ -4,6 +4,7 @@ import hashlib
 import json
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -70,20 +71,29 @@ def inspect_audio(path):
     return {"duration": duration, "codec": audio.get("codec_name"), "tags": tags, "sha256": digest(path), "bytes": Path(path).stat().st_size}
 
 
-def prepare_audio(root, track_id, source_url, previous):
+def prepare_audio(root, track_id, source_url, previous, force=False):
     url = kivo_media_url(source_url)
     root = Path(root)
-    if previous.get("status") == "ready" and previous.get("source_url") == url:
+    if not force and previous.get("status") == "ready" and previous.get("source_url") == url:
         cached = root / previous["path"]
         if cached.is_file() and digest(cached) == previous.get("sha256"):
             return previous
     suffix = Path(urlparse(url).path).suffix.lower()
     if suffix not in {".mp3", ".ogg", ".wav", ".m4a", ".flac"}:
         raise ValueError("Unrecognized audio extension. Inspect the source manually.")
-    relative = Path("media") / str(track_id) / ("audio" + suffix)
-    target = root / relative
-    download(url, target, limit=150 * 1024 * 1024)
-    info = inspect_audio(target)
+    directory = root / "media" / str(track_id)
+    directory.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".prepare-", dir=directory) as temporary:
+        incoming = Path(temporary) / ("audio" + suffix)
+        download(url, incoming, limit=150 * 1024 * 1024)
+        info = inspect_audio(incoming)
+        if previous.get("sha256") == info["sha256"] and previous.get("path"):
+            old_file = root / previous["path"]
+            if old_file.is_file() and digest(old_file) == info["sha256"]:
+                return previous | {"status":"ready", "source_url":url, "error":""}
+        relative = Path("media") / str(track_id) / ("audio-" + info["sha256"][:24] + suffix)
+        target = root / relative
+        incoming.replace(target)
     return info | {"status": "ready", "path": relative.as_posix(), "source_url": url}
 
 
@@ -104,21 +114,31 @@ def resize_cover(original, destination):
     return outputs
 
 
-def prepare_cover(root, source_url, previous):
+def prepare_cover(root, source_url, previous, force=False):
     root = Path(root)
     url = kivo_media_url(source_url)
-    if previous.get("status") == "ready" and previous.get("source_url") == url:
+    if not force and previous.get("status") == "ready" and previous.get("source_url") == url:
         files = previous.get("files", {})
         if files and all((root / file["path"]).is_file() and digest(root / file["path"]) == file["sha256"] for file in files.values()):
             return previous
     suffix = Path(urlparse(url).path).suffix.lower()
     if suffix not in {".jpg", ".jpeg", ".png", ".webp"}:
         raise ValueError("Unrecognized cover extension.")
-    original = root / "media" / "cover" / ("original" + suffix)
-    download(url, original, limit=30 * 1024 * 1024)
-    outputs = resize_cover(original, original.parent)
-    outputs["original"] = {"path": original}
-    for item in outputs.values():
-        item["sha256"] = digest(item["path"])
-        item["path"] = item["path"].relative_to(root).as_posix()
+    directory = root / "media" / "cover"
+    directory.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".prepare-", dir=directory) as temporary:
+        original = Path(temporary) / ("original" + suffix)
+        download(url, original, limit=30 * 1024 * 1024)
+        outputs = resize_cover(original, original.parent)
+        outputs["original"] = {"path": original}
+        # Validate and generate every variant before changing the saved review's paths.
+        for size, item in outputs.items():
+            item["sha256"] = digest(item["path"])
+            old = previous.get("files", {}).get(size, {})
+            if old.get("sha256") == item["sha256"] and old.get("path") and (root / old["path"]).is_file() and digest(root / old["path"]) == item["sha256"]:
+                item["path"] = old["path"]
+            else:
+                target = directory / (size + "-" + item["sha256"][:24] + item["path"].suffix)
+                item["path"].replace(target)
+                item["path"] = target.relative_to(root).as_posix()
     return {"status": "ready", "source_url": url, "files": outputs}

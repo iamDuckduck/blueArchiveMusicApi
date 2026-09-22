@@ -7,22 +7,23 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='review.css') }}">
   <script src="{{ url_for('static', filename='review.js') }}" defer></script>
 </head>
-<body>
+<body data-review-prefix="{{ review_prefix or '' }}">
   <aside class="sidebar">
     <a class="brand" href="/" aria-label="Blue Archive Music local review"><span class="brand-icon">♪</span><span>Blue Archive<span class="brand-sub">MUSIC COLLECTION</span></span></a>
     <span class="eyebrow">YOUR WORKSPACE</span>
+    <a href="/catalog" class="nav-item"><span>▤</span> Album discovery</a>
     <a href="#album" class="nav-item active"><span>▤</span> Album review <span class="count">1</span></a>
     <div class="sidebar-note"><span class="local-dot"></span> Running locally<p>Your edits and prepared files stay on this computer.</p></div>
   </aside>
   <main>
-    <header class="topbar"><span>Catalog <span class="divider">/</span> Album review</span><span class="local-label">LOCAL WORKSPACE</span></header>
+    <header class="topbar"><span><a href="/catalog">Catalog</a> <span class="divider">/</span> Album review</span><span class="local-label">LOCAL WORKSPACE</span></header>
     <div class="page-content">
       <div class="page-heading"><div><span class="eyebrow">PREPARE YOUR COLLECTION</span><h1>A little care before play.</h1><p>Review one album, keep the details that matter, and pick the music to include.</p></div><span id="album-status" class="badge">Needs review</span></div>
       <div id="notice" role="status" aria-live="polite" hidden></div>
       <noscript>This local review page needs JavaScript enabled.</noscript>
       <section class="panel album-panel" id="album" aria-labelledby="album-heading">
         <div id="cover-art" class="cover-placeholder"><span>♪</span><small>Cover prepares locally</small></div>
-        <div class="album-main"><span class="eyebrow">FIRST ALBUM · VERITAS</span><h2 id="album-heading">青春あんさんぶる Vol.2 「ヴェリタス」</h2><p class="album-summary">2 music tracks <span>·</span> 1 spoken drama reference</p>
+        <div class="album-main"><span class="eyebrow">RELEASE REVIEW</span><h2 id="album-heading">Loading saved release…</h2><p class="album-summary"></p>
           <div class="album-actions"><button id="fetch" class="button secondary" type="button" aria-describedby="reload-help">Load Kivo details</button><button id="include" class="button primary" type="button">Include album</button><button id="skip" class="button quiet" type="button">Skip for now</button></div>
           <p class="helper">Including this album enables local preparation. It does not publish anything.</p>
           <p class="helper" id="reload-help">Reload fetches these tracks’ Kivo details again and keeps your saved corrections. Use Prepare for audio, or GameKee’s Check again for that reference.</p>
@@ -31,9 +32,11 @@
       <form id="review-form">
         <section class="panel details-panel" aria-labelledby="details-heading"><div class="section-title"><h2 id="details-heading">Album details</h2><span class="muted">Editable · saved on this computer</span></div>
           <div class="album-fields"><label class="wide">Release title<input id="album-title" data-album-field="title" maxlength="2000"></label><label>Category<select id="album-category" data-album-field="category"><option>青春あんさんぶる</option><option>絆ダイアローグ</option><option>OST</option></select></label><label>Release date<input type="date" id="album-date" data-album-field="release_date"></label><label class="wide">Your album notes<textarea data-album-field="notes" rows="2" placeholder="Any release details or corrections you want to keep"></textarea></label></div>
-          <p class="helper">Initial release date and positions come from the <a id="release-link" target="_blank" rel="noopener noreferrer">saved release listing</a>. Source suggestions are not official verification.</p>
+          <p class="helper" id="release-note">Initial release date and positions come from the <a id="release-link" target="_blank" rel="noopener noreferrer">saved release listing</a>. Source suggestions are not official verification.</p>
+          <p class="helper">Keep unknown official disc/track numbers blank. Review release identity and credits before publication.</p>
+          <label>Matched GameKee release URL (optional)<input data-album-field="gamekee_url" type="url" placeholder="https://www.gamekee.com/ba/…html"></label>
         </section>
-        <section class="panel preparation-panel" aria-labelledby="prep-heading"><div><h2 id="prep-heading">Prepare files</h2><p id="job-message" aria-live="polite">Load source information to begin.</p><p id="cover-status" class="helper"></p></div><button id="prepare" class="button primary" type="button" disabled>Prepare included tracks</button></section>
+        <section class="panel preparation-panel" aria-labelledby="prep-heading"><div><h2 id="prep-heading">Prepare files</h2><p id="job-message" aria-live="polite">Load source information to begin.</p><p id="cover-status" class="helper"></p><p class="helper">Explicit refresh downloads again even when URLs are unchanged. Existing validated files remain available if a replacement fails. Select the reviewed results again before publishing.</p></div><div><button id="prepare" class="button primary" type="button" disabled>Prepare included tracks</button><button id="refresh-media" class="button secondary" type="button" disabled>Refresh source and media</button></div></section>
         <section class="panel preparation-panel" aria-labelledby="publish-heading"><div><h2 id="publish-heading">Publish to development catalog</h2><p id="publish-message" aria-live="polite">Not published.</p><p class="helper">Uses the configured backend and its isolated catalog-import database/media destination. Repeating publication updates the same source identities.</p></div><button id="publish" class="button primary" type="button" disabled>Publish reviewed album</button></section>
         <div class="section-title tracks-heading"><h2>Track review</h2><span class="muted">Edits stay separate from the source</span></div>
         <div id="tracks"><div class="panel loading">Loading your saved review…</div></div>

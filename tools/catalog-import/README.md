@@ -24,8 +24,9 @@ Run `python -m unittest discover -s tests -v` for the source, preparation,
 persistence and local browser-API tests. Fixtures and temporary files keep these
 tests independent from live source services.
 
-The browser tool reviews and publishes one local sample release. General discovery
-and review of incoming changes remain later chapters.
+The browser tool discovers release candidates and keeps separate saved reviews
+and media for each release, alongside the original Veritas sample. Detailed
+per-field incoming-change review remains a later chapter.
 
 ## Backend development and media storage
 
@@ -136,3 +137,38 @@ Fetching, preparation and saving edits alone do not publish anything.
 
 These tests mock the HTTP backend. Full PostgreSQL/R2/browser verification of this
 reviewed flow remains separate; this chapter does not prove live app playback.
+## Discover candidates
+
+Open `/catalog` and scan Kivo to read every index page. Include, skip or mark candidates as source groupings. Failed or inconsistent scans retain the previous complete scan. Open a release candidate's saved review to inspect and correct it separately.
+
+For a discovery-only manual check, run these commands from this tool directory:
+
+```powershell
+Remove-Item Env:CATALOG_IMPORT_API_KEY -ErrorAction SilentlyContinue
+python app.py --port 8766 --data-dir ../../target/catalog-discovery-review
+```
+
+Open `http://127.0.0.1:8766/catalog`, scan, inspect a candidate's source records,
+and save an include/skip/review decision. Reload the page, then stop/restart the
+tool and confirm the choice remains. This directory is separate from your saved
+Veritas review. Scanning needs internet access to Kivo, but no Spring backend,
+PostgreSQL, Redis or R2. With the Python API key unset, publication is disabled.
+
+## Separate release reviews
+
+Open a candidate’s saved review from discovery. Each release has its own SQLite review, media folder and album-scoped URL. New tracks enter unselected; missing records and corrections are retained. GameKee references are chosen per release. The original Veritas workspace remains available at `/`.
+
+Reviews are stored in `releases/<stable-id>/reviews.sqlite3` under the chosen
+data directory, with media alongside them. Opening a review does not download or
+publish music. For a manual isolation check, open two candidates in separate tabs,
+edit and save one title, and confirm the other review is unchanged. Reload and
+restart the tool to check persistence. New tracks must be selected deliberately;
+they are not automatically included for preparation or selected for publication.
+
+## Map release appearances
+
+Create an identified official release and map selected source tracks into it. The same recording can have separate album appearances. Link renamed source labels to existing releases without discarding saved reviews.
+
+## Refresh source and media
+
+Explicit refresh downloads and validates again even at an unchanged URL. Failed or interrupted replacement retains prior validated files. Identical bytes reuse paths; changed audio or artwork requires publication reselection.

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Album discovery · Blue Archive Music</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='review.css') }}">
+  <script src="{{ url_for('static', filename='catalog.js') }}" defer></script>
+</head>
+<body>
+  <aside class="sidebar"><a class="brand" href="/">Blue Archive Music</a><a class="nav-item active" href="/catalog">Album discovery</a><a class="nav-item" href="/">Saved Veritas review</a><div class="sidebar-note">Local workspace. Scanning does not prepare or publish music.</div></aside>
+  <main class="catalog-page"><header class="topbar"><span>Catalog / Album discovery</span><a href="/">Saved Veritas review</a></header><div class="page-content">
+    <h1>Find the next release.</h1>
+    <p>Include only identifiable official releases. Mark broad source labels as groupings; their tracks remain available for matching to real releases. Missing index entries are retained, not deleted.</p>
+    <section class="panel"><button class="button primary" id="scan" type="button">Scan Kivo index</button><p id="scan-status" role="status"></p><label>Filter candidates<input id="filter" type="search" placeholder="Album title or decision"></label></section>
+    <section class="panel"><details><summary>Create an identified release for grouped tracks</summary>
+      <form id="create-release"><label>Official release title<input name="title" maxlength="255" required></label>
+        <label>Category<input name="category" list="categories" maxlength="255" required></label><datalist id="categories"><option>OST</option><option>青春あんさんぶる</option><option>絆ダイアローグ</option></datalist>
+        <label>Release evidence URL (optional)<input name="reference" type="url" placeholder="https://…"></label>
+        <label class="checkbox-row"><input name="official" type="checkbox" required> I have identified this as an official release, not just a source grouping.</label>
+        <button class="button primary" type="submit">Save release draft</button>
+      </form><p class="helper">Create the release once, then inspect a source grouping and map selected tracks into it. This does not include or publish the release.</p>
+    </details></section>
+    <p id="notice" role="status" hidden></p><div id="candidates"></div>
+  </div></main>
+</body>
+</html>

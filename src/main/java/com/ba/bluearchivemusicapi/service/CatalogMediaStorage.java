@@ -15,6 +15,8 @@ import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.ByteArrayInputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
@@ -42,15 +44,13 @@ public class CatalogMediaStorage {
     private String bucket;
 
     public String store(MultipartFile file, String logicalKey) {
-        String extension = logicalKey.substring(logicalKey.lastIndexOf('.') + 1);
+        String extension = validatedExtension(file, logicalKey);
         String type = TYPES.get(extension);
-        if (file.isEmpty() || type == null) throw new IllegalArgumentException("Empty or unsupported catalog media");
         try {
             byte[] bytes = file.getBytes();
             // Immutable keys keep a failed replacement from damaging the live file.
             // Hashing the logical identity also bounds the key length for existing SQL columns.
-            String key = "catalog/" + hash(logicalKey.getBytes(StandardCharsets.UTF_8))
-                    + "/" + hash(bytes) + "." + extension;
+            String key = mediaKey(new ByteArrayInputStream(bytes), logicalKey, extension);
             if ("local".equals(mode)) {
                 Path root = Path.of(localRoot).toAbsolutePath().normalize();
                 Path target = root.resolve(key).normalize();
@@ -88,6 +88,34 @@ public class CatalogMediaStorage {
             return key;
         } catch (IOException e) {
             throw new FileUploadException("Failed to store catalog media", e);
+        }
+    }
+
+    /** Determine the immutable destination without uploading; stale edits fail before media writes. */
+    public String keyFor(MultipartFile file, String logicalKey) {
+        String extension = validatedExtension(file, logicalKey);
+        try (var stream = file.getInputStream()) {
+            return mediaKey(stream, logicalKey, extension);
+        } catch (IOException error) {
+            throw new FileUploadException("Cannot inspect catalog media", error);
+        }
+    }
+
+    private String validatedExtension(MultipartFile file, String logicalKey) {
+        String extension = logicalKey.substring(logicalKey.lastIndexOf('.') + 1);
+        if (file.isEmpty() || !TYPES.containsKey(extension)) throw new IllegalArgumentException("Empty or unsupported catalog media");
+        return extension;
+    }
+
+    private String mediaKey(InputStream stream, String logicalKey, String extension) throws IOException {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] buffer = new byte[8192];
+            for (int read; (read = stream.read(buffer)) != -1;) digest.update(buffer, 0, read);
+            return "catalog/" + hash(logicalKey.getBytes(StandardCharsets.UTF_8)) + "/"
+                    + HexFormat.of().formatHex(digest.digest()) + "." + extension;
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException(impossible);
         }
     }
 

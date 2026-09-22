@@ -4,7 +4,8 @@ import threading
 
 import media
 import sources
-from store import find_track, now
+from store import find_track, now, propose_fields
+from publisher import PublicationConflict
 
 
 class ReviewService:
@@ -15,14 +16,14 @@ class ReviewService:
         self.thread = None
 
     def start(self, action):
-        if action not in {"fetch", "prepare", "refresh", "gamekee", "publish"}:
+        if action not in {"fetch", "prepare", "refresh", "gamekee", "publish", "published"}:
             raise ValueError("Unknown action.")
         if not self.job_lock.acquire(blocking=False):
             raise ValueError("A preparation task is already running.")
         if action in {"prepare", "refresh"} and self.store.read()["album"]["decision"] != "included":
             self.job_lock.release()
             raise ValueError("Include the album before preparing files.")
-        if action == "publish" and self.publisher is None:
+        if action in {"publish", "published"} and self.publisher is None:
             self.job_lock.release()
             raise ValueError("Publication is not configured. Start the tool with a backend URL and API key.")
         self.store.update(lambda s: s.update(job={"running": True, "action": action, "message": "Starting…", "started_at": now()}))
@@ -41,13 +42,17 @@ class ReviewService:
                 self.fetch_gamekee(force=True)
             elif action == "publish":
                 self.publisher.publish()
+            elif action == "published":
+                self.publisher.observe_published()
             else:
                 self.prepare(force=action == "refresh")
             self.store.update(lambda s: s["job"].update(running=False, message="Finished. Review the results and any source or preparation warnings.", finished_at=now()))
         except Exception as error:
             if action == "publish":
+                conflict = isinstance(error, PublicationConflict)
                 self.store.update(lambda s: s["publication"].update(
-                    status="failed", message=f"Publication stopped: {error}. Safe to retry."))
+                    status="conflict" if conflict else "failed",
+                    message=str(error) if conflict else f"Publication stopped: {error}. Safe to retry."))
             self.store.update(lambda s: s["job"].update(running=False, message=f"Task stopped: {error}. Retry to continue.", finished_at=now()))
         finally:
             self.job_lock.release()
@@ -68,8 +73,10 @@ class ReviewService:
                     if row["source"] and row["source"] != data:
                         row.setdefault("source_history", []).append({"fetched_at":row.get("source_fetched_at"), "raw":row["source"]})
                         row["publish_selected"] = False
+                        propose_fields(row, "kivo", sources.suggestions_from_kivo(data), sources.suggestions_from_kivo(row["source"]))
+                    elif not row["source"]:
+                        row["suggestions"].update(sources.suggestions_from_kivo(data))
                     row.update(source=data, source_status="ready", source_error="", source_fetched_at=now())
-                    row["suggestions"].update(sources.suggestions_from_kivo(data))
                     if row.get("pending_index"):
                         row["index"] = row.pop("pending_index")
                         row.pop("index_warning", None)
@@ -139,8 +146,11 @@ class ReviewService:
                         row.setdefault("media_history", []).append(previous)
                         row["publish_selected"] = False
                     row["media"] = prepared
+                    if previous.get("status") == "ready":
+                        propose_fields(row, "tags", sources.suggestions_from_tags(prepared["tags"]), sources.suggestions_from_tags(row["tags"]))
+                    else:
+                        row["suggestions"].update(sources.suggestions_from_tags(prepared["tags"]))
                     row["tags"] = prepared["tags"]
-                    row["suggestions"].update(sources.suggestions_from_tags(prepared["tags"]))
 
                 self.store.update(save)
             except Exception as error:

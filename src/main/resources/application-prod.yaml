@@ -13,6 +13,3 @@ blueArchive:
     accessKey: ${R2_ACCESS_KEY}
     secretKey: ${R2_SECRET_KEY}
     bucket: ${R2_BUCKET}
-
-  redis:
-    url: ${REDIS_URL}

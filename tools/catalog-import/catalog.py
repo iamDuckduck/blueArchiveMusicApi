@@ -303,6 +303,7 @@ class Catalog:
         def mutate(state):
             tracks = {t["source_id"]: t for t in state["tracks"] if t["source_id"] is not None}
             incoming = {r["id"]: r for r in records}
+            next_order = max(((t["suggestions"] | t["edits"])["display_order"] for t in state["tracks"]), default=0) + 1
             for identity, record in incoming.items():
                 if state["album"]["id"] == "veritas-vol-2" and identity == 257:
                     reference = next((t for t in state["tracks"] if t["id"] == "drama"), None)
@@ -310,7 +311,10 @@ class Catalog:
                         reference["index"] = record
                         continue
                 if identity not in tracks:
-                    state["tracks"].append(draft_track(record))
+                    added = draft_track(record)
+                    added["suggestions"]["display_order"] = next_order
+                    next_order += 1
+                    state["tracks"].append(added)
                 elif "index" not in tracks[identity]:
                     tracks[identity]["index"] = record
                 elif tracks[identity]["index"] != record:

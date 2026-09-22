@@ -85,12 +85,6 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- redis with spring boot-->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-redis</artifactId>
-        </dependency>
-
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-docker-compose</artifactId>

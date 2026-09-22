@@ -51,15 +51,37 @@ class CatalogMediaStorageTest {
     void objectRetryDoesNotPutAndNewUploadHasPlayableContentType() {
         var client = mock(S3Client.class);
         var storage = storage(client, "r2");
+        String predicted = storage.keyFor(audio((byte) 1), "album/track.mp3");
+        verifyNoInteractions(client);
         when(client.headObject(any(HeadObjectRequest.class)))
                 .thenThrow(S3Exception.builder().statusCode(404).build())
                 .thenReturn(HeadObjectResponse.builder().build());
         String key = storage.store(audio((byte) 1), "album/track.mp3");
+        assertThat(key).isEqualTo(predicted);
         assertThat(storage.store(audio((byte) 1), "album/track.mp3")).isEqualTo(key);
         var request = org.mockito.ArgumentCaptor.forClass(PutObjectRequest.class);
         verify(client, times(1)).putObject(request.capture(), any(RequestBody.class));
         assertThat(request.getValue().contentType()).isEqualTo("audio/mpeg");
         assertThat(request.getValue().ifNoneMatch()).isEqualTo("*");
+    }
+
+    @Test
+    void predictedAndStoredKeysAgreeAcrossContentAndMediaTypes() throws Exception {
+        var storage = storage(mock(S3Client.class), "local");
+        var bytes = new byte[20_000]; // Crosses the streaming hash buffer boundary.
+        new java.util.Random(1).nextBytes(bytes);
+        for (String extension : java.util.List.of("mp3", "jpg", "png", "flac")) {
+            var file = audio(bytes);
+            String logicalKey = "release/track." + extension;
+            String predicted = storage.keyFor(file, logicalKey);
+            assertThat(Files.exists(directory.resolve(predicted))).isFalse();
+            assertThat(storage.store(file, logicalKey)).isEqualTo(predicted);
+            assertThat(Files.readAllBytes(directory.resolve(predicted))).isEqualTo(bytes);
+            assertThat(storage.keyFor(audio((byte) 1), logicalKey)).isNotEqualTo(predicted);
+        }
+        assertThatThrownBy(() -> storage.keyFor(audio(), "track.mp3")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> storage.keyFor(audio((byte) 1), "track.exe")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> storage.store(audio((byte) 1), "track.exe")).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

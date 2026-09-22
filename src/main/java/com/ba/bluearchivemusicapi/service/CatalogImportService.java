@@ -2,16 +2,22 @@ package com.ba.bluearchivemusicapi.service;
 
 import com.ba.bluearchivemusicapi.dtos.catalog.CatalogAlbumImportDTO;
 import com.ba.bluearchivemusicapi.dtos.catalog.CatalogImportResultDTO;
-import com.ba.bluearchivemusicapi.dtos.catalog.CatalogPerformerDTO;
 import com.ba.bluearchivemusicapi.dtos.catalog.CatalogTrackImportDTO;
+import com.ba.bluearchivemusicapi.dtos.catalog.CatalogImportStateDTO;
+import com.ba.bluearchivemusicapi.common.exception.CatalogConflictException;
 import com.ba.bluearchivemusicapi.entities.*;
 import com.ba.bluearchivemusicapi.repositories.AlbumRepository;
 import com.ba.bluearchivemusicapi.repositories.ArtistRepository;
 import com.ba.bluearchivemusicapi.repositories.CategoryRepository;
 import com.ba.bluearchivemusicapi.repositories.SongRepository;
 import lombok.RequiredArgsConstructor;
+import org.hibernate.exception.ConstraintViolationException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.LinkedHashSet;
@@ -28,17 +34,54 @@ public class CatalogImportService {
     private final CategoryRepository categoryRepository;
     private final ArtistRepository artistRepository;
     private final CatalogMediaStorage mediaStorage;
+    private final CatalogImportSnapshot snapshots;
+    private final PlatformTransactionManager transactionManager;
 
-    @Transactional
     public CatalogImportResultDTO publishAlbum(
             String source, String sourceAlbumId, CatalogAlbumImportDTO input,
-            MultipartFile original, MultipartFile cover400, MultipartFile cover800) {
+            MultipartFile original, MultipartFile cover400, MultipartFile cover800, String expectedRevision) {
         validateIdentity(source, sourceAlbumId);
-        Album album = albumRepository.findByImportSourceAndSourceAlbumId(source, sourceAlbumId).orElse(null);
-        boolean created = album == null;
-        if (created) album = new Album();
+        var transaction = new TransactionTemplate(transactionManager);
+        transaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        try {
+            return transaction.execute(status -> publishAlbumInTransaction(
+                    source, sourceAlbumId, input, original, cover400, cover800, expectedRevision));
+        } catch (DataIntegrityViolationException failure) {
+            if (!isAlbumIdentityCollision(failure)) throw failure;
+            // The failed insert has rolled back. Re-check the winner in a fresh transaction,
+            // keeping the caller's original revision. Retry this specific race only once.
+            return transaction.execute(status -> publishAlbumInTransaction(
+                    source, sourceAlbumId, input, original, cover400, cover800, expectedRevision));
+        }
+    }
 
+    static boolean isAlbumIdentityCollision(DataIntegrityViolationException failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof ConstraintViolationException constraint
+                    && "23505".equals(constraint.getSQLState())
+                    && constraint.getConstraintName() != null
+                    && constraint.getConstraintName().toLowerCase(java.util.Locale.ROOT)
+                        .contains("uq_album_import_identity")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private CatalogImportResultDTO publishAlbumInTransaction(
+            String source, String sourceAlbumId, CatalogAlbumImportDTO input,
+            MultipartFile original, MultipartFile cover400, MultipartFile cover800, String expectedRevision) {
+        Album album = albumRepository.findImportForUpdate(source, sourceAlbumId).orElse(null);
+        boolean created = album == null;
         String root = "catalog/" + source + "/albums/" + sourceAlbumId + "/covers/";
+        CatalogImportStateDTO current = snapshots.album(album);
+        CatalogImportStateDTO desired = snapshots.state(current.albumId(), null, CatalogImportSnapshot.albumFields(input),
+                CatalogImportSnapshot.albumMedia(mediaStorage.keyFor(original, root + "original." + extension(original)),
+                        mediaStorage.keyFor(cover400, root + "400.jpg"), mediaStorage.keyFor(cover800, root + "800.jpg")));
+        if (publicationDecision(current, desired, expectedRevision) == PublicationDecision.UNCHANGED) {
+            return result(current, false, "unchanged");
+        }
+        if (created) album = new Album();
         String originalPath = mediaStorage.store(original, root + "original." + extension(original));
         String cover400Path = mediaStorage.store(cover400, root + "400.jpg");
         String cover800Path = mediaStorage.store(cover800, root + "800.jpg");
@@ -56,29 +99,36 @@ public class CatalogImportService {
         album.setImportSource(source);
         album.setSourceAlbumId(sourceAlbumId);
         album = albumRepository.save(album);
-        return new CatalogImportResultDTO(album.getId(), null, created, created ? "created" : "updated");
+        return result(snapshots.album(album), created, created ? "created" : "updated");
     }
 
     @Transactional
     public CatalogImportResultDTO publishTrack(
             String source, String sourceAlbumId, String sourceTrackId,
-            CatalogTrackImportDTO input, MultipartFile audio) {
+            CatalogTrackImportDTO input, MultipartFile audio, String expectedRevision) {
         validateIdentity(source, sourceAlbumId);
         validateIdentityPart(sourceTrackId);
         if (!KINDS.contains(input.kind())) throw new IllegalArgumentException("Unknown music kind");
-        Album album = albumRepository.findByImportSourceAndSourceAlbumId(source, sourceAlbumId)
+        Album album = albumRepository.findImportForUpdate(source, sourceAlbumId)
                 .orElseThrow(() -> new IllegalArgumentException("Publish the album before its tracks"));
-        Song song = songRepository.findByAlbumIdAndImportSourceAndSourceTrackId(
+        Song song = songRepository.findImportForUpdate(
                 album.getId(), source, sourceTrackId).orElse(null);
         boolean created = song == null;
+        String audioKey = "catalog/" + source + "/albums/" + sourceAlbumId + "/tracks/" + sourceTrackId + "." + extension(audio);
+        CatalogImportStateDTO current = snapshots.track(song);
+        CatalogImportStateDTO desired = snapshots.state(album.getId(), current.songId(), CatalogImportSnapshot.trackFields(input),
+                CatalogImportSnapshot.trackMedia(mediaStorage.keyFor(audio, audioKey), album.getCover400Path()));
+        if (publicationDecision(current, desired, expectedRevision) == PublicationDecision.UNCHANGED) {
+            return result(current, false, "unchanged");
+        }
         if (created) song = new Song();
 
-        String audioPath = mediaStorage.store(audio,
-                "catalog/" + source + "/albums/" + sourceAlbumId + "/tracks/" + sourceTrackId + "." + extension(audio));
+        String audioPath = mediaStorage.store(audio, audioKey);
         song.setTitle(input.title().strip());
         song.setDescription(input.description());
         song.setDiscNumber(input.disc());
         song.setTrackNumber(input.position());
+        song.setDisplayOrder(input.displayOrder());
         song.setMusicKind(input.kind());
         song.setAudioPath(audioPath);
         song.setImagePath(album.getCover400Path());
@@ -88,21 +138,42 @@ public class CatalogImportService {
         if (song.getPlayCount() == null) song.setPlayCount(0L);
         syncCredits(song, input);
         song = songRepository.save(song);
-        return new CatalogImportResultDTO(album.getId(), song.getId(), created, created ? "created" : "updated");
+        return result(snapshots.track(song), created, created ? "created" : "updated");
+    }
+
+    @Transactional(readOnly = true)
+    public CatalogImportStateDTO albumState(String source, String identity) {
+        validateIdentity(source, identity);
+        return snapshots.album(albumRepository.findByImportSourceAndSourceAlbumId(source, identity).orElse(null));
+    }
+
+    @Transactional(readOnly = true)
+    public CatalogImportStateDTO trackState(String source, String identity, String trackId) {
+        validateIdentity(source, identity);
+        validateIdentityPart(trackId);
+        Album album = albumRepository.findByImportSourceAndSourceAlbumId(source, identity).orElse(null);
+        if (album == null) return CatalogImportStateDTO.missing();
+        return snapshots.track(songRepository.findByAlbumIdAndImportSourceAndSourceTrackId(album.getId(), source, trackId).orElse(null));
+    }
+
+    private enum PublicationDecision { UNCHANGED, WRITE_ALLOWED }
+
+    private PublicationDecision publicationDecision(CatalogImportStateDTO current, CatalogImportStateDTO desired, String expected) {
+        // No write is needed for identical content, including after a lost successful response.
+        if (current.exists() && current.revision().equals(desired.revision())) return PublicationDecision.UNCHANGED;
+        if (!java.util.Objects.equals(current.revision(), expected)) throw new CatalogConflictException(current);
+        return PublicationDecision.WRITE_ALLOWED;
+    }
+
+    private CatalogImportResultDTO result(CatalogImportStateDTO state, boolean created, String status) {
+        return new CatalogImportResultDTO(state.albumId(), state.songId(), created, status, state.revision());
     }
 
     private void syncCredits(Song song, CatalogTrackImportDTO input) {
-        Set<Credit> desired = new LinkedHashSet<>();
-        addNames(desired, input.artists(), SongArtistType.ARTIST);
-        addNames(desired, input.composers(), SongArtistType.COMPOSER);
-        SongArtistType performerType = "instrumental".equals(input.kind())
-                ? SongArtistType.ASSOCIATED : SongArtistType.ARTIST;
-        if (input.performers() != null) {
-            addNames(desired, input.performers().stream().map(CatalogPerformerDTO::displayName).toList(), performerType);
-        }
+        List<CatalogImportSnapshot.Credit> desired = CatalogImportSnapshot.credits(input);
 
         song.getSongArtists().removeIf(link -> !desired.contains(
-                new Credit(link.getArtist().getName(), link.getType())));
+                new CatalogImportSnapshot.Credit(link.getArtist().getName(), link.getType())));
         Set<String> existing = new LinkedHashSet<>();
         song.getSongArtists().forEach(link -> existing.add(link.getArtist().getName() + "\0" + link.getType()));
         desired.forEach(credit -> {
@@ -110,12 +181,6 @@ public class CatalogImportService {
                 song.addArtist(findOrCreateArtist(credit.name()), credit.type());
             }
         });
-    }
-
-    private void addNames(Set<Credit> result, List<String> names, SongArtistType type) {
-        if (names == null) return;
-        names.stream().filter(name -> name != null && !name.isBlank())
-                .map(String::strip).forEach(name -> result.add(new Credit(name, type)));
     }
 
     private Artist findOrCreateArtist(String name) {
@@ -143,5 +208,4 @@ public class CatalogImportService {
         return extension;
     }
 
-    private record Credit(String name, SongArtistType type) {}
 }

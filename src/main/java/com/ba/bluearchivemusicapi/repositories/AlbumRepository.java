@@ -13,6 +13,10 @@ public interface AlbumRepository extends JpaRepository<Album,Long> {
     Optional<Album> findById(Long id);
     Optional<Album> findByImportSourceAndSourceAlbumId(String importSource, String sourceAlbumId);
 
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT a FROM Album a WHERE a.importSource = :source AND a.sourceAlbumId = :identity")
+    Optional<Album> findImportForUpdate(String source, String identity);
+
     @Query("SELECT DISTINCT a FROM Album a " +
            "LEFT JOIN FETCH a.category " +
            "LEFT JOIN FETCH a.songList")

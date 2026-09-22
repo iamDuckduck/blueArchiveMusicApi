@@ -133,6 +133,16 @@ class DiscoveryTests(unittest.TestCase):
         self.assertFalse(review["tracks"][0]["included"])
         self.assertEqual(review["tracks"][1]["fields"]["kind"], "instrumental")
 
+    def test_new_tracks_append_after_reviewed_display_order_without_fabricating_numbering(self):
+        self.catalog.merge([track(1)])
+        identity = next(iter(self.catalog.read()["candidates"]))
+        self.catalog.open_review(identity).save_edits({"tracks":{"1":{"display_order":20}}})
+        self.catalog.merge([track(1), track(2)])
+        saved = self.catalog.open_review(identity).view()
+        self.assertEqual(saved["tracks"][1]["fields"]["display_order"], 21)
+        self.assertIsNone(saved["tracks"][1]["fields"]["position"])
+        self.assertIsNone(saved["tracks"][1]["fields"]["disc"])
+
     def test_saved_discovery_decision_applies_when_reopening_an_existing_review(self):
         self.catalog.merge([track(1)])
         identity = next(iter(self.catalog.read()["candidates"]))

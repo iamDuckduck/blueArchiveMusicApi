@@ -10,10 +10,10 @@ from PIL import Image
 
 from app import create_app
 from media import digest, inspect_audio, prepare_audio, prepare_cover, resize_cover
-from publisher import Publisher
+from publisher import Publisher, PublicationConflict
 from service import ReviewService
 from sources import content_text, cv_names, fetch_gamekee, suggestions_from_kivo, suggestions_from_tags
-from store import Store, find_track
+from store import Store, find_track, propose_fields
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -58,6 +58,19 @@ class SavedReviewTests(unittest.TestCase):
             self.store.save_edits({"album": {"title": "Must not save"}, "tracks": {"255": {"position": -1}}})
         self.assertNotEqual(self.store.view()["album"]["fields"]["title"], "Must not save")
 
+    def test_display_order_is_saved_separately_from_unknown_official_numbers(self):
+        self.store.save_edits({"tracks":{"255":{"position":None, "disc":None, "display_order":10}}})
+        with patch("sources.fetch_kivo", side_effect=record):
+            ReviewService(self.store).fetch_tracks()
+        saved = Store(self.temp.name).view()
+        fields = find_track(saved, 255)["fields"]
+        self.assertEqual(fields["display_order"], 10)
+        self.assertIsNone(fields["position"])
+        self.assertIsNone(fields["disc"])
+        for order in [None, True, 0, 1000000]:
+            with self.assertRaises(ValueError):
+                self.store.save_edits({"tracks":{"255":{"display_order":order}}})
+
     def test_old_credit_text_is_preserved_as_individual_entries(self):
         self.store.update(lambda s: find_track(s, 255)["edits"].update(
             group="Veritas", composer="Nor\nAnother composer", performers="チヒロ (CV: 山村響)\nUnresolved credit"))
@@ -85,6 +98,42 @@ class SavedReviewTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.store.save_edits({"album":{"title":"Must not save"}, "tracks":{"255":invalid}})
             self.assertNotEqual(self.store.view()["album"]["fields"]["title"], "Must not save")
+
+    def test_changed_details_are_proposals_until_used_or_kept(self):
+        service = ReviewService(self.store)
+        with patch("sources.fetch_kivo", side_effect=record):
+            service.fetch_tracks()
+        before = find_track(self.store.view(), 255)["fields"]["title"]
+        def updated(identity):
+            data = record(identity)
+            data["title"] = "Incoming corrected title"
+            return data
+        with patch("sources.fetch_kivo", side_effect=updated):
+            service.fetch_tracks()
+        row = find_track(self.store.view(), 255)
+        self.assertEqual(row["fields"]["title"], before)
+        self.assertEqual(row["pending_suggestions"]["kivo"]["title"], "Incoming corrected title")
+        self.assertEqual(len(row["source_history"]), 1)
+        self.store.review_suggestions("255", row["pending_suggestions"], "keep")
+        with patch("sources.fetch_kivo", side_effect=updated):
+            service.fetch_tracks()
+        kept = find_track(Store(self.temp.name).view(), 255)
+        self.assertEqual(kept["fields"]["title"], before)
+        self.assertFalse(kept["pending_suggestions"])
+        other = find_track(self.store.view(), 256)
+        self.store.review_suggestions("256", other["pending_suggestions"], "use")
+        self.assertEqual(find_track(self.store.view(), 256)["fields"]["title"], "Incoming corrected title")
+
+    def test_tag_proposals_preserve_manual_credits_and_reject_stale_review_actions(self):
+        self.store.save_edits({"tracks":{"255":{"composer":["Owner correction"]}}})
+        self.store.update(lambda s: propose_fields(find_track(s, 255), "tags", {"composer":"Incoming composer"}, {"composer":"Old composer"}))
+        row = find_track(self.store.view(), 255)
+        self.assertEqual(row["fields"]["composer"], ["Owner correction"])
+        self.assertEqual(row["pending_suggestions"]["tags"]["composer"], ["Incoming composer"])
+        with self.assertRaises(ValueError):
+            self.store.review_suggestions("255", {"tags":{"composer":["Earlier unseen value"]}}, "use")
+        self.store.review_suggestions("255", row["pending_suggestions"], "use")
+        self.assertEqual(find_track(self.store.view(), 255)["fields"]["composer"], ["Incoming composer"])
 
 
 class SourceTests(unittest.TestCase):
@@ -325,12 +374,14 @@ class PublisherTests(unittest.TestCase):
             "800":{"path":"media/cover/cover-800.jpg"}}})
         find_track(state, 255)["media"] = {"status":"ready", "path":"media/255/audio.mp3"}
         find_track(state, 256)["media"] = {"status":"ready", "path":"media/256/audio.mp3"}
+        for item in [*state["album"]["cover"]["files"].values(), find_track(state, 255)["media"], find_track(state, 256)["media"]]:
+            item["sha256"] = digest(self.store.directory / item["path"])
 
     def test_reviewed_release_uses_stable_put_urls_and_records_results(self):
         responses = []
         for album_id, song_id in [(7, None), (7, 8), (7, 9)]:
             response = Mock(ok=True, status_code=200)
-            response.json.return_value = {"albumId":album_id, "songId":song_id, "status":"created"}
+            response.json.return_value = {"albumId":album_id, "songId":song_id, "status":"created", "revision":"a" * 64}
             responses.append(response)
         with patch("publisher.requests.put", side_effect=responses) as put:
             result = Publisher(self.store, "http://127.0.0.1:8080", "secret").publish()
@@ -338,6 +389,7 @@ class PublisherTests(unittest.TestCase):
         self.assertEqual(put.call_count, 3)
         self.assertTrue(put.call_args_list[0].args[0].endswith("/kivo/albums/veritas-vol-2"))
         self.assertTrue(put.call_args_list[1].args[0].endswith("/kivo/albums/veritas-vol-2/tracks/255"))
+        self.assertEqual(json.loads(put.call_args_list[1].kwargs["files"]["metadata"][1])["displayOrder"], 1)
 
     def test_publish_failure_is_visible_and_retryable(self):
         failing = Mock()
@@ -352,7 +404,7 @@ class PublisherTests(unittest.TestCase):
     def test_partial_success_survives_restart_and_retry_uses_same_urls(self):
         def response(album_id, song_id):
             result = Mock(status_code=200)
-            result.json.return_value = {"albumId": album_id, "songId": song_id, "status": "updated"}
+            result.json.return_value = {"albumId": album_id, "songId": song_id, "status": "updated", "revision": "a" * 64}
             return result
 
         failure = Mock(status_code=500, text="temporary track failure")
@@ -375,10 +427,106 @@ class PublisherTests(unittest.TestCase):
         self.assertEqual(result["tracks"]["256"]["songId"], 9)
 
 
+    def test_attempt_keeps_album_success_when_first_track_conflicts(self):
+        album_response = Mock(status_code=200)
+        album_response.json.return_value = {"albumId":7, "songId":None, "status":"updated", "revision":"a" * 64}
+        conflict_response = Mock(status_code=409)
+        conflict_response.json.return_value = {"current":{
+            "exists":True, "albumId":7, "songId":8, "revision":"b" * 64,
+            "metadata":{"title":"Published track"}, "media":{},
+        }}
+        during_requests = []
+
+        def respond(*args, **kwargs):
+            during_requests.append(self.store.read()["publication"]["attempt"]["records"])
+            return [album_response, conflict_response][len(during_requests) - 1]
+
+        with patch("publisher.requests.put", side_effect=respond) as put:
+            with self.assertRaisesRegex(PublicationConflict, "earlier successful records"):
+                Publisher(self.store, "http://127.0.0.1:8080", "secret").publish()
+        self.assertEqual(put.call_count, 2)
+        self.assertEqual([item["status"] for item in during_requests[0]], ["sending", "not_sent", "not_sent"])
+        self.assertEqual([item["status"] for item in during_requests[1]], ["saved", "sending", "not_sent"])
+        publication = self.store.read()["publication"]
+        self.assertEqual(publication["attempt"], {"destination":"http://127.0.0.1:8080", "records":[
+            {"record":"album", "status":"saved"},
+            {"record":"255", "status":"conflict"},
+            {"record":"256", "status":"not_sent"},
+        ]})
+        self.assertEqual(set(publication["destinations"]["http://127.0.0.1:8080"]["receipts"]), {"album"})
+
+    def test_attempt_resets_on_retry_and_destination_change(self):
+        response = Mock(status_code=200)
+        response.json.return_value = {"albumId":7, "songId":8, "status":"created", "revision":"a" * 64}
+        publisher = Publisher(self.store, "http://127.0.0.1:8080", "secret")
+        with patch("publisher.requests.put", return_value=response):
+            publisher.publish()
+        self.store.update(lambda state: find_track(state, 256).update(publish_selected=False))
+        response.json.return_value["status"] = "unchanged"
+        with patch("publisher.requests.put", side_effect=[response, ConnectionError("Connection lost")]):
+            with self.assertRaisesRegex(ConnectionError, "Connection lost"):
+                publisher.publish()
+        self.assertEqual(self.store.read()["publication"]["attempt"]["records"], [
+            {"record":"album", "status":"unchanged"}, {"record":"255", "status":"failed"},
+        ])
+
+        with patch("publisher.requests.put", side_effect=ConnectionError("Offline")):
+            with self.assertRaises(ConnectionError):
+                Publisher(self.store, "http://127.0.0.1:18082/", "secret").publish()
+        publication = self.store.read()["publication"]
+        self.assertEqual(publication["attempt"], {"destination":"http://127.0.0.1:18082", "records":[
+            {"record":"album", "status":"failed"}, {"record":"255", "status":"not_sent"},
+        ]})
+        self.assertEqual(set(publication["destinations"]["http://127.0.0.1:8080"]["receipts"]), {"album", "255", "256"})
+
+    def test_attempt_file_error_stops_before_remaining_records(self):
+        self.store.update(lambda state: state["album"]["cover"]["files"]["original"].update(sha256="changed"))
+        with patch("publisher.requests.put") as put:
+            with self.assertRaisesRegex(ValueError, "Prepared media changed"):
+                Publisher(self.store, "http://127.0.0.1:8080", "secret").publish()
+        put.assert_not_called()
+        self.assertEqual(self.store.read()["publication"]["attempt"]["records"], [
+            {"record":"album", "status":"failed"},
+            {"record":"255", "status":"not_sent"},
+            {"record":"256", "status":"not_sent"},
+        ])
+
+    def test_success_clears_only_the_successful_records_conflict(self):
+        destination = "http://127.0.0.1:8080"
+        self.store.update(lambda state: state["publication"].update(destinations={destination:{
+            "receipts":{}, "observed":{}, "conflict":"255",
+        }}))
+        response = Mock(status_code=200)
+        response.json.return_value = {"albumId":7, "songId":8, "status":"unchanged", "revision":"a" * 64}
+        conflicts_during_requests = []
+
+        def respond(*args, **kwargs):
+            conflicts_during_requests.append(self.store.read()["publication"]["destinations"][destination].get("conflict"))
+            return response
+
+        with patch("publisher.requests.put", side_effect=respond):
+            Publisher(self.store, destination, "secret").publish()
+        self.assertEqual(conflicts_during_requests, ["255", "255", None])
+        self.assertNotIn("conflict", self.store.read()["publication"]["destinations"][destination])
+
+    def test_accepting_album_baseline_preserves_an_unrelated_track_conflict(self):
+        destination = "http://127.0.0.1:8080"
+        self.store.update(lambda state: state["publication"].update(destinations={destination:{
+            "receipts":{}, "conflict":"255", "observed":{
+                "album":{"exists":True, "albumId":7, "songId":None, "revision":"a" * 64, "metadata":{}, "media":{}},
+                "255":{"exists":True, "albumId":7, "songId":8, "revision":"b" * 64, "metadata":{}, "media":{}},
+            },
+        }}))
+        publisher = Publisher(self.store, destination, "secret")
+        publisher.accept_baseline("album", "a" * 64)
+        self.assertEqual(self.store.read()["publication"]["destinations"][destination]["conflict"], "255")
+        publisher.accept_baseline("255", "b" * 64)
+        self.assertNotIn("conflict", self.store.read()["publication"]["destinations"][destination])
+
     def test_available_selected_track_publishes_while_missing_track_remains_visible(self):
         self.store.update(lambda s: find_track(s, 256).update(publish_selected=False, media={"status":"failed", "error":"Missing audio"}))
         response = Mock(status_code=200)
-        response.json.return_value = {"albumId":7, "songId":8, "status":"created"}
+        response.json.return_value = {"albumId":7, "songId":8, "status":"created", "revision":"a" * 64}
         with patch("publisher.requests.put", return_value=response) as put:
             Publisher(self.store, "http://127.0.0.1:8080", "secret").publish()
         self.assertEqual(put.call_count, 2)
@@ -386,6 +534,74 @@ class PublisherTests(unittest.TestCase):
         self.assertTrue(missing["included"])
         self.assertEqual(missing["media"]["error"], "Missing audio")
         self.assertEqual(put.call_args_list[1].kwargs["files"]["audio"][2], "audio/mpeg")
+
+    def test_publication_baselines_are_scoped_to_destination_and_reused_on_retries(self):
+        response = Mock(status_code=200)
+        response.json.return_value = {"albumId":7, "songId":8, "revision":"a" * 64}
+        first = Publisher(self.store, "http://127.0.0.1:8080", "secret")
+        with patch("publisher.requests.put", return_value=response) as put:
+            first.publish()
+            first.publish()
+            self.assertNotIn("X-Catalog-Revision", put.call_args_list[0].kwargs["headers"])
+            for call in put.call_args_list[3:6]:
+                self.assertEqual(call.kwargs["headers"]["X-Catalog-Revision"], "a" * 64)
+            Publisher(self.store, "http://127.0.0.1:18082", "secret").publish()
+            self.assertNotIn("X-Catalog-Revision", put.call_args_list[6].kwargs["headers"])
+        destinations = Store(self.temp.name).read()["publication"]["destinations"]
+        self.assertEqual(len(destinations), 2)
+
+    def test_conflict_preserves_draft_and_needs_explicit_baseline_acceptance(self):
+        publisher = Publisher(self.store, "http://127.0.0.1:8080", "secret")
+        current = {"exists":True, "revision":"b" * 64, "albumId":7, "songId":None,
+                   "metadata":{"title":"Newer live title"}, "media":{}}
+        response = Mock(status_code=409)
+        response.json.return_value = {"current":current}
+        before = self.store.view()["album"]["fields"]
+        with patch("publisher.requests.put", return_value=response) as put:
+            with self.assertRaises(PublicationConflict):
+                publisher.publish()
+            self.assertEqual(put.call_count, 1)
+        self.assertNotIn("X-Catalog-Revision", publisher._headers("album"))
+        self.assertEqual(self.store.view()["album"]["fields"], before)
+        with self.assertRaises(ValueError):
+            publisher.accept_baseline("album", "old displayed token")
+        publisher.accept_baseline("album", current["revision"])
+        self.assertEqual(publisher._headers("album")["X-Catalog-Revision"], current["revision"])
+        self.assertFalse(find_track(self.store.read(), 255)["publish_selected"])
+        self.assertEqual(self.store.view()["album"]["fields"], before)
+
+    def test_reading_live_state_does_not_advance_baselines_or_change_drafts(self):
+        publisher = Publisher(self.store, "http://127.0.0.1:8080", "secret")
+        response = Mock(status_code=200)
+        response.json.return_value = {"exists":False, "revision":None, "metadata":{}, "media":{}}
+        before = self.store.view()["tracks"]
+        with patch("publisher.requests.get", return_value=response) as get:
+            publisher.observe_published()
+        self.assertEqual(get.call_count, 3)
+        self.assertEqual(self.store.view()["tracks"], before)
+        self.assertNotIn("X-Catalog-Revision", publisher._headers("255"))
+
+    def test_unvalidated_or_outside_media_files_are_never_uploaded(self):
+        publisher = Publisher(self.store, "http://127.0.0.1:8080", "secret")
+        for item in [{"path":"reviews.sqlite3", "sha256":digest(self.store.database)},
+                     {"path":"media/255/audio.mp3", "sha256":"changed"}]:
+            with self.assertRaises(ValueError):
+                publisher._open(item)
+
+    def test_unreviewed_source_proposals_block_selected_tracks_before_any_upload(self):
+        self.store.update(lambda s: find_track(s, 255).update(pending_suggestions={"kivo":{"title":"Incoming"}}))
+        with patch("publisher.requests.put") as put:
+            with self.assertRaisesRegex(ValueError, "incoming source"):
+                Publisher(self.store, "http://127.0.0.1:8080", "secret").publish()
+            put.assert_not_called()
+
+    def test_malformed_published_snapshot_cannot_be_used_as_a_baseline(self):
+        publisher = Publisher(self.store, "http://127.0.0.1:8080", "secret")
+        response = Mock(status_code=200)
+        response.json.return_value = {"exists":True, "metadata":{}, "media":{}}
+        with patch("publisher.requests.get", return_value=response), self.assertRaises(ValueError):
+            publisher.observe_published()
+        self.assertEqual(publisher._destination(self.store.read())["observed"], {})
 
 
 class BrowserApiTests(unittest.TestCase):
@@ -403,6 +619,41 @@ class BrowserApiTests(unittest.TestCase):
         response = self.client.put("/api/review", json={"tracks": {"255": {"notes": "Checked locally"}}})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(find_track(response.json, 255)["fields"]["notes"], "Checked locally")
+
+    def test_comparison_controls_load_without_demo_scaffolding(self):
+        page = self.client.get("/").get_data(as_text=True)
+        self.assertLess(page.index("published-comparison.js"), page.index("review.js"))
+        self.assertIn('id="published-panel"', page)
+        self.assertIn('id="publication-progress"', page)
+        self.assertIn('id="show-matching"', page)
+        self.assertIn('<a href="/catalog">Catalog</a>', page)
+        self.assertNotIn("demo-toolbar", page)
+        for path in ["/static/published-comparison.js", "/static/review.js", "/static/review.css"]:
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 200)
+            response.close()
+
+    def test_confirming_baseline_only_changes_local_review_state(self):
+        destination = "http://127.0.0.1:18080"
+        app = create_app(self.temp.name, destination, "test-only-key")
+        store = app.extensions["review_store"]
+        snapshot = {"exists":True, "albumId":7, "songId":None, "revision":"a" * 64,
+                    "metadata":{"title":"Published correction"}, "media":{}}
+        store.update(lambda state: state["publication"].update(destinations={destination:{
+            "receipts":{}, "observed":{"album":snapshot}, "conflict":"album",
+        }}))
+        store.update(lambda state: find_track(state, 255).update(publish_selected=True))
+        before = store.view()
+        with patch("publisher.requests.put") as upload, patch("publisher.requests.get") as fetch:
+            response = app.test_client().post("/api/publication/baseline", json={"record":"album", "revision":snapshot["revision"]})
+        upload.assert_not_called()
+        fetch.assert_not_called()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json["album"], before["album"])
+        self.assertFalse(find_track(response.json, 255)["publish_selected"])
+        saved = response.json["publication"]["destinations"][destination]
+        self.assertEqual(saved["receipts"]["album"]["revision"], snapshot["revision"])
+        self.assertNotIn("conflict", saved)
 
     def test_foreign_origin_and_host_cannot_mutate_review(self):
         self.assertEqual(self.client.post("/api/decision", json={"decision":"included"}, headers={"Origin":"https://example.com"}).status_code, 403)

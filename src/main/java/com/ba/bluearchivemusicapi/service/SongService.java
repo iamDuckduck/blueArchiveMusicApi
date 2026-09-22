@@ -15,13 +15,10 @@ import com.ba.bluearchivemusicapi.repositories.ArtistRepository;
 import com.ba.bluearchivemusicapi.repositories.SongRepository;
 import lombok.AllArgsConstructor;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-
-import static com.ba.bluearchivemusicapi.common.constant.CacheConstants.SONG_PLAYCOUNT_CACHE;
 
 @Service
 @AllArgsConstructor
@@ -36,8 +33,6 @@ public class SongService {
     private final SongMapper songMapper;
 
     private final ArtistRepository artistRepository;
-
-    private final RedisTemplate<String, Integer> integerRedisTemplate;
 
     @Transactional
 	public SongDTO uploadSong(SongUploadDTO songUploadDTO) {
@@ -95,8 +90,10 @@ public class SongService {
         return songMapper.songsToSongDTOs(randomSongList);
     }
 
+    @Transactional
     public void incrementSongPlayCount(Long id) {
-        String playCountCacheKey = SONG_PLAYCOUNT_CACHE + "::" + id;
-        integerRedisTemplate.opsForValue().increment(playCountCacheKey, 1);
+        if (songRepository.incrementPlayCount(id) == 0) {
+            throw new ResourceNotFoundException("Song not found with id: " + id);
+        }
     }
 }

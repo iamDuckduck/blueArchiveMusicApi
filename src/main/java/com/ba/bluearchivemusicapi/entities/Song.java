@@ -47,6 +47,9 @@ public class Song {
     @Column(name = "track_number")
     private Integer trackNumber;
 
+    @Column(name = "display_order")
+    private Integer displayOrder;
+
     @Column(name = "import_source", length = 64)
     private String importSource;
 

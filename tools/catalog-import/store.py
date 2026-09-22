@@ -10,6 +10,47 @@ from pathlib import Path
 
 from credits import CREDIT_FIELDS, credit_entries
 
+TRACK_FIELDS = {"title", "position", "disc", "display_order", "kind", "group", "performers", "composer", "notes"}
+
+
+def validate_fields(values, allowed):
+    if not isinstance(values, dict) or values.keys() - allowed:
+        raise ValueError("Unknown review field.")
+    for key, value in values.items():
+        if key in CREDIT_FIELDS:
+            values[key] = credit_entries(key, value)
+        elif key == "display_order":
+            if type(value) is not int or not 1 <= value <= 999999:
+                raise ValueError("Display order must be between 1 and 999999; leave official numbering blank if unknown.")
+        elif key in {"position", "disc"}:
+            if value is not None and (type(value) is not int or not 1 <= value <= 999):
+                raise ValueError("Track and disc numbers must be between 1 and 999, or blank.")
+        elif not isinstance(value, str) or len(value) > 20000:
+            raise ValueError("Review fields must be text, up to 20,000 characters.")
+        if key == "kind" and value not in {"vocal", "instrumental", "bgm", "unsure", "drama"}:
+            raise ValueError("Unknown music type.")
+
+
+def propose_fields(track, source, incoming, previous):
+    """Only changed source fields propose edits; the reviewed draft never moves implicitly."""
+    pending = track.setdefault("pending_suggestions", {}).setdefault(source, {})
+    reviewed = track["suggestions"] | track["edits"]
+    for field in previous.keys() - incoming.keys():
+        pending.pop(field, None)  # Missing evidence is not an instruction to erase a reviewed value.
+    for field, value in incoming.items():
+        if previous.get(field) == value:
+            continue
+        proposal = {field:value}
+        validate_fields(proposal, TRACK_FIELDS)
+        current = credit_entries(field, reviewed[field]) if field in CREDIT_FIELDS else reviewed[field]
+        if proposal[field] != current:
+            pending[field] = proposal[field]
+            track["publish_selected"] = False
+        else:
+            pending.pop(field, None)
+    if not pending:
+        track["pending_suggestions"].pop(source)
+
 
 def now():
     return datetime.now(timezone.utc).isoformat()
@@ -89,8 +130,9 @@ class Store:
                 item.update(previous)
                 item.update(status="ready" if previous.get("status") == "ready" else "failed",
                             error="Interrupted. Previous validated files are retained; retry to check for updates.")
-        for track in state["tracks"]:
+        for order, track in enumerate(state["tracks"], 1):
             track.setdefault("publish_selected", track["included"] and track["source_id"] is not None)
+            track["suggestions"].setdefault("display_order", order)
 
     def read(self):
         with self.lock, self.connect() as db:
@@ -120,25 +162,10 @@ class Store:
 
     def save_edits(self, payload):
         album_fields = {"title", "category", "release_date", "notes", "gamekee_url"}
-        track_fields = {"title", "position", "disc", "kind", "group", "performers", "composer", "notes"}
-
-        def validate(values, allowed):
-            if not isinstance(values, dict) or values.keys() - allowed:
-                raise ValueError("Unknown review field.")
-            for key, value in values.items():
-                if key in CREDIT_FIELDS:
-                    values[key] = credit_entries(key, value)
-                elif key in {"position", "disc"}:
-                    if value is not None and (type(value) is not int or not 1 <= value <= 999):
-                        raise ValueError("Track and disc numbers must be between 1 and 999, or blank.")
-                elif not isinstance(value, str) or len(value) > 20000:
-                    raise ValueError("Review fields must be text, up to 20,000 characters.")
-                if key == "kind" and value not in {"vocal", "instrumental", "bgm", "unsure", "drama"}:
-                    raise ValueError("Unknown music type.")
 
         def mutate(state):
             album = payload.get("album", {})
-            validate(album, album_fields)
+            validate_fields(album, album_fields)
             state["album"]["edits"].update(album)
             tracks = payload.get("tracks", {})
             if not isinstance(tracks, dict):
@@ -147,12 +174,39 @@ class Store:
             for track_id, values in tracks.items():
                 if track_id not in by_id or track_id == "drama":
                     raise ValueError("Unknown or excluded reference track.")
-                validate(values, track_fields)
+                validate_fields(values, TRACK_FIELDS)
                 by_id[track_id]["edits"].update(values)
                 if values.get("kind") == "drama":
                     by_id[track_id]["included"] = False
                     by_id[track_id]["publish_selected"] = False
 
+        self.update(mutate)
+
+    def review_suggestions(self, track_id, proposals, choice):
+        if choice not in {"use", "keep"} or not isinstance(proposals, dict) or not proposals:
+            raise ValueError("Choose incoming suggestions to use, or keep the reviewed values.")
+
+        def mutate(state):
+            track = find_track(state, track_id)
+            pending = track.get("pending_suggestions", {})
+            for source, fields in proposals.items():
+                if not isinstance(fields, dict) or not fields:
+                    raise ValueError("Choose the shown source fields.")
+                for field, value in fields.items():
+                    if field not in pending.get(source, {}) or pending[source][field] != value:
+                        raise ValueError("The incoming suggestion changed. Compare the latest shown value first.")
+                    reviewed = track["suggestions"] | track["edits"]
+                    selected = {field:value if choice == "use" else reviewed[field]}
+                    validate_fields(selected, TRACK_FIELDS)
+                    track["edits"].update(selected)
+                    track.setdefault("suggestion_reviews", []).append({"source":source, "field":field, "proposed":value,
+                        "choice":choice, "reviewed_at":now()})
+                    pending[source].pop(field)
+                if not pending[source]:
+                    pending.pop(source)
+            track["publish_selected"] = False
+            if (track["suggestions"] | track["edits"])["kind"] == "drama":
+                track["included"] = False
         self.update(mutate)
 
 

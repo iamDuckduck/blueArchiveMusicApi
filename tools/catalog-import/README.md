@@ -31,9 +31,9 @@ per-field incoming-change review remains a later chapter.
 ## Backend development and media storage
 
 Everyday local development and manual testing use the normal `dev` profile:
-development PostgreSQL, Redis, and a dedicated development R2 bucket. There is
+development PostgreSQL and a dedicated development R2 bucket. There is
 no separate H2/local-media application profile or `/media/` route in this chapter.
-Production uses the `prod` profile with its own database, Redis and R2 settings.
+Production uses the `prod` profile with its own database and R2 settings.
 
 Load the backend's ignored environment file through your IDE/run configuration;
 Spring Boot does not automatically load arbitrary `.env` files. Use these existing
@@ -44,7 +44,6 @@ SPRING_PROFILES_ACTIVE=dev
 POSTGRES_DATASOURCE_URL=jdbc:postgresql://localhost:5432/<development-database>
 POSTGRES_USER=<development-user>
 POSTGRES_PASSWORD=<development-password>
-REDIS_URL=redis://localhost:6379
 R2_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
 R2_BUCKET=bluearchive-music-dev
 R2_ACCESS_KEY=<development-bucket-only-access-key>
@@ -104,15 +103,63 @@ Set `ADMIN_API_KEY` in the backend environment. Calls require that value in the
 Source identities select existing records independently of titles. A repeat
 request updates the same record, reuses unchanged stored media and retains an
 existing play count. Responses include `albumId`, `songId` (null for an album),
-`created` and `status`. Shared artists are matched by reviewed display name and
+`created`, `status` and `revision`. Shared artists are matched by reviewed display name and
 linked by role; character/CV pairs currently become combined display names.
 
-The automated API check uses test-only H2 and temporary files, with the Redis
-scheduler mocked. It verifies authentication, album-before-track validation,
+The automated API check uses test-only H2 and temporary files.
+It verifies authentication, album-before-track validation,
 repeated publication, public album metadata, stable IDs/credits/play counts and
 unchanged stored bytes. It does not call real R2, PostgreSQL or a browser, and it
-does not reintroduce the removed local-media route. Concurrent metadata-edit
-protection and full publish-to-player verification are still later review work.
+does not reintroduce the removed local-media route. Revision checks are described
+below; full publish-to-player verification remains later review work.
+
+## Outdated publication protection (chapter 15)
+
+Authenticated GET requests at the album and track import URLs return the current
+metadata, media keys and a content fingerprint (`revision`). Changed existing
+content must be published with its last reviewed revision in the
+`X-Catalog-Revision` header. A stale or missing revision returns HTTP 409 with
+the current state, before writing media. Play counts and audit dates do not
+change the fingerprint. Identical content returns `unchanged` without writes,
+so retrying after a lost success response remains safe.
+
+For example, if one review publishes a corrected title, an older review cannot
+silently overwrite that correction while publishing a composer change. It must
+compare the latest content and accept a new baseline first. Existing import
+records are locked during publication so competing updates are checked in order.
+
+Chapter 15 follow-up: simultaneous first-time album creation is resolved by the
+album identity unique constraint. The losing transaction rolls back, then retries
+once in a fresh transaction with the original requested revision: identical
+content returns `unchanged`, while different content returns 409 with the winner's
+state. Only this specific unique-constraint collision is retried; other database
+errors are not swallowed. Tests force both requests to observe a missing album
+before either inserts it. Revision decisions now use named outcomes, and media
+prediction/storage share the same key calculation.
+
+This is not a redesign of upload transactions: locks still span media storage,
+and a losing create may already have stored immutable media. Potential orphan
+files are logged and retained for deliberate cleanup, not automatically deleted.
+
+The Python comparison interface in chapter 16 sends the saved revision and helps
+review conflicts before retrying. Tests cover stale drafts, identical retries,
+edits outside the import endpoint and competing updates using H2 and temporary
+media; real PostgreSQL/R2 verification remains separate.
+
+## Direct play counting (revised chapter 14)
+
+`POST /user/song/{id}/play` now performs one transactional, atomic database
+increment of `play_count`; it does not load and save the whole song. Existing
+songs still return 202, unknown IDs return 404, and a null counter starts at one.
+There is no background polling or Redis dependency. No plays means no counter
+queries. Concurrent-play tests verify increments and unchanged song metadata in
+H2; they do not establish PostgreSQL concurrency or simultaneous import safety.
+
+Before upgrading an existing Redis-based deployment, stop incoming play writes,
+let the old scheduler drain pending `songPlayCounts::*` counters, and verify they
+were persisted before stopping the old backend. This change does not migrate
+pending Redis counts or remove any running Redis service or stored data.
+
 ## Publish selected reviewed tracks
 
 Start the backend with its normal development settings above, including
@@ -152,7 +199,7 @@ Open `http://127.0.0.1:8766/catalog`, scan, inspect a candidate's source records
 and save an include/skip/review decision. Reload the page, then stop/restart the
 tool and confirm the choice remains. This directory is separate from your saved
 Veritas review. Scanning needs internet access to Kivo, but no Spring backend,
-PostgreSQL, Redis or R2. With the Python API key unset, publication is disabled.
+PostgreSQL or R2. With the Python API key unset, publication is disabled.
 
 ## Separate release reviews
 
@@ -172,3 +219,34 @@ Create an identified official release and map selected source tracks into it. Th
 ## Refresh source and media
 
 Explicit refresh downloads and validates again even at an unchanged URL. Failed or interrupted replacement retains prior validated files. Identical bytes reuse paths; changed audio or artwork requires publication reselection.
+
+## Display order
+
+Display order controls the album sequence independently of nullable official disc/track numbers. New tracks append after the reviewed sequence. The import API requires positive `displayOrder`; migration V1.10 backfills existing order without inventing official numbers.
+
+## Review changed source fields
+
+Changed Kivo/tag fields appear beside reviewed values. Use a suggestion or keep the reviewed value for each field; unresolved proposals block selected-track publication. Decisions persist and clear publication selection.
+
+## Compare published content (chapter 16)
+
+Publication receipts and reviewed revisions are saved separately for each backend
+URL. Check published state reads the latest content without uploading or advancing
+your saved revision. The comparison shows changed fields first; matching fields
+and technical details are optional.
+
+If publishing meets a newer version, it pauses with the published values beside
+your saved draft. Edit my draft takes you back to the local fields. Keep my values
+for next publish asks for confirmation before accepting the shown revision as the
+new starting point. Neither action publishes; confirmation keeps the draft/media
+and clears selection (all tracks for an album, only that track for a track).
+Re-select reviewed tracks and publish separately when ready.
+
+Publication sends the album first, then selected tracks. Progress records which
+items were saved, conflicted or not sent; earlier successful records are not rolled
+back. Unconfirmed requests can be checked/retried using the same source identities.
+Prepared files must still match their saved validation hashes before upload.
+
+Run `node --test tests/test_published_comparison.cjs` for field comparison checks,
+alongside the Python tests above. The local conflict preview was browser-checked
+with fake data; these checks do not publish to PostgreSQL or R2.

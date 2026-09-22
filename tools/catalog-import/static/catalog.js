@@ -3,6 +3,8 @@ let catalog;
 let polling = false;
 let releaseIdentity = crypto.randomUUID();
 const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"})[c]);
+const decisionLabels = {included:"Included for review", review:"Needs review", skipped:"Skipped", grouping:"Source grouping", linked:"Linked to existing collection"};
+const kindLabels = {release_candidate:"Candidate collection", source_grouping:"Broad source group", unresolved:"Unidentified source group"};
 
 async function api(path, body) {
   const response = await fetch(path, body === undefined ? {} : {
@@ -18,16 +20,16 @@ function render() {
   $("#scan-status").textContent = catalog.scan.message;
   $("#scan").disabled = catalog.scan.running;
   const query = $("#filter").value.toLowerCase();
-  const visible = catalog.candidates.filter(c => `${c.source_album} ${c.decision} ${c.kind}`.toLowerCase().includes(query));
+  const visible = catalog.candidates.filter(c => `${c.source_album} ${c.decision} ${c.kind} ${decisionLabels[c.decision]} ${kindLabels[c.kind]}`.toLowerCase().includes(query));
   $("#candidates").innerHTML = visible.map(c => `
     <section class="panel" data-candidate="${c.id}">
       <h2>${escapeHtml(c.source_album || "Unidentified release")}</h2>
-      <p>${c.track_count} source tracks · ${c.mapped_track_count || 0} mapped tracks · ${escapeHtml(c.kind)} · <strong>${escapeHtml(c.decision)}</strong>${!c.seen_in_latest_scan && !c.manual ? " · Not seen in latest scan (retained)" : ""}</p>
+      <p>${c.track_count} source tracks · ${c.mapped_track_count || 0} mapped tracks · ${escapeHtml(kindLabels[c.kind])} · <strong>${escapeHtml(decisionLabels[c.decision])}</strong>${!c.seen_in_latest_scan && !c.manual ? " · Not seen in latest scan (retained)" : ""}</p>
       <div class="album-actions">
-        <button class="button primary" data-decision="included" ${catalog.scan.running || c.kind !== "release_candidate" || c.redirect_to ? "disabled" : ""}>Include release</button>
-        <button class="button quiet" data-decision="skipped" ${catalog.scan.running ? "disabled" : ""}>Skip</button>
-        <button class="button quiet" data-decision="grouping" ${catalog.scan.running ? "disabled" : ""}>Source grouping</button>
-        <button class="button quiet" data-decision="review" ${catalog.scan.running ? "disabled" : ""}>Needs review</button>
+        <button class="button primary" data-decision="included" ${catalog.scan.running || c.kind !== "release_candidate" || c.redirect_to || c.decision === "included" ? "disabled" : ""}>Include for review</button>
+        <button class="button quiet" data-decision="skipped" ${catalog.scan.running || c.redirect_to || c.decision === "skipped" ? "disabled" : ""}>Skip</button>
+        <button class="button quiet" data-decision="grouping" ${catalog.scan.running || c.redirect_to || c.decision === "grouping" ? "disabled" : ""}>Source grouping</button>
+        <button class="button quiet" data-decision="review" ${catalog.scan.running || c.redirect_to || c.decision === "review" ? "disabled" : ""}>Needs review</button>
         <button class="button secondary" data-evidence>Inspect source tracks</button>
         ${c.redirect_to ? `<a class="text-link" href="/albums/${c.redirect_to}/">Open linked release</a>` : c.kind === "release_candidate" && c.decision !== "grouping" ? `<a class="text-link" href="/albums/${c.id}/">Open saved review</a>` : ""}
       </div>

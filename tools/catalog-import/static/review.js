@@ -9,6 +9,94 @@ const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"
 const statusLabels = {pending:"Not prepared", ready:"Ready", failed:"Needs attention", running:"Preparing", excluded:"Excluded", review:"Needs review", included:"Included", skipped:"Skipped"};
 const reviewPrefix = document.body.dataset.reviewPrefix || "";
 
+function mediaNeedsRefresh(track) {
+  const sourceUrl = track.source?.file;
+  if (!sourceUrl || track.media.status !== "ready") return false;
+  const normalizedUrl = sourceUrl.startsWith("//") ? "https:" + sourceUrl : sourceUrl;
+  return normalizedUrl !== track.media.source_url;
+}
+
+function nextOperatorStep(state, hasUnsavedChanges = false, isSaving = false) {
+  const step = (stage, message, href, action, canPublish = false) => ({stage, message, href, action, canPublish});
+  if (state.job.running) {
+    const stage = {publish:"publish", published:"review", fetch:"review", gamekee:"review", prepare:"prepare", refresh:"prepare"}[state.job.action];
+    const href = state.job.action === "publish" ? "#publish-heading" : state.job.action === "published" ? "#published-panel" : "#prep-heading";
+    return step(stage, state.job.message, href, "View progress");
+  }
+  if (isSaving) return step("review", "Saving your local draft…", "#save", "View save status");
+  if (hasUnsavedChanges) return step("review", "Save your changes before continuing. Saving only updates this local draft.", "#save", "Save changes below");
+  if (state.album.decision !== "included") {
+    return step("include", "Include this collection to work on it. Skipping or leaving it for review keeps the saved draft intact.", "#album", "Choose inclusion");
+  }
+  const included = state.tracks.filter(track => track.included && track.source_id !== null);
+  if (!included.length) return step("include", "Choose at least one music track to prepare. Inclusion does not publish it.", "#track-review", "Choose tracks");
+  const selected = included.filter(track => track.publish_selected);
+  const sourceChecks = selected.length ? selected : included;
+  const changedIndex = sourceChecks.find(track => track.pending_index);
+  if (changedIndex) return step("review", `Kivo's index changed for “${changedIndex.fields.title}”. Reload Kivo details to compare the new source with your saved review.`, "#fetch", "Reload source details");
+  const changedAudio = sourceChecks.find(mediaNeedsRefresh);
+  if (changedAudio) return step("prepare", `The source audio URL changed for “${changedAudio.fields.title}”. Prepare it again before selecting it for publication.`, "#prep-heading", "Prepare changed audio");
+  const prepared = included.filter(track => track.media.status === "ready");
+  if (state.album.cover.status !== "ready" || !prepared.length) {
+    return step("prepare", "Prepare the included tracks and cover. Audio previews will appear here; no backend data changes.", "#prep-heading", "Prepare files");
+  }
+  const publication = state.publication;
+  const destination = publication.destinations?.[publication.destination];
+  if (destination?.conflict) return step("review", "Publishing paused because the published version changed. Compare it with your draft before retrying.", "#published-panel", "Review the conflict");
+  if (!state.album.fields.title.trim() || !state.album.fields.category.trim()) {
+    return step("review", "Enter a collection title and category. Unknown release dates and official track numbers can stay blank.", "#details", "Complete collection details");
+  }
+  if (!selected.length) {
+    return step("review", `${prepared.length} of ${included.length} included tracks prepared. Listen and check the details, then tick “Publish this reviewed track” for the music you approve.`, "#track-review", "Review prepared tracks");
+  }
+  const missingMedia = selected.find(track => track.media.status !== "ready");
+  if (missingMedia) return step("prepare", `“${missingMedia.fields.title}” needs preparation. Retry, or leave it unselected to publish other ready tracks.`, `#track-${missingMedia.id}`, "Check this track");
+  const missingTitle = selected.find(track => !track.fields.title.trim());
+  if (missingTitle) return step("review", "Every selected track needs a title before publication.", `#track-${missingTitle.id}`, "Add the track title");
+  const incoming = selected.find(track => Object.keys(track.pending_suggestions || {}).length);
+  if (incoming) return step("review", `Compare incoming source changes for “${incoming.fields.title}”. Use the suggestions or keep your reviewed values.`, `#track-${incoming.id}`, "Review source changes");
+  if (!publication.enabled) return step("publish", "Local review is ready. Start this tool with the development backend URL and import API key to enable publication.", "#publish-heading", "View publication setup");
+  const unselected = included.length - selected.length;
+  const message = `Ready to publish ${selected.length} selected ${selected.length === 1 ? "track" : "tracks"} with this collection's details and cover.${unselected ? ` ${unselected} other included ${unselected === 1 ? "track will" : "tracks will"} not be sent.` : ""}`;
+  return step("publish", message, "#publish-heading", "Review publish action", true);
+}
+
+function renderOperatorStep() {
+  const next = nextOperatorStep(review, dirty(), saving);
+  $("#next-step").textContent = next.message;
+  $("#next-step-link").href = next.href;
+  $("#next-step-link").textContent = next.action;
+  $("#publish-readiness").textContent = next.message;
+  $("#publish").disabled = !next.canPublish;
+  for (const item of document.querySelectorAll("[data-stage]")) {
+    if (item.dataset.stage === next.stage) item.setAttribute("aria-current", "step");
+    else item.removeAttribute("aria-current");
+  }
+}
+
+function renderGamekee(state) {
+  const g = state.gamekee;
+  const selectedUrl = Object.hasOwn(pending.album, "gamekee_url") ? pending.album.gamekee_url : state.album.fields.gamekee_url;
+  const sameReference = !!selectedUrl && selectedUrl === g.url;
+  const status = !selectedUrl ? "missing_reference" : sameReference ? g.status : "pending";
+  setBadge($("#gamekee-status"), status, {pending:"Not checked", ready:"Available", failed:"Reference unavailable", missing_reference:"Optional · no URL"}[status]);
+  $("#gamekee-message").textContent = !selectedUrl
+    ? "No GameKee page is linked. This reference is optional: use another official source and save your notes below. It does not block preparation or publication."
+    : !sameReference
+      ? "This reference URL has not been checked. Use Check again to save and check it. Evidence from the previous URL is hidden."
+      : g.status === "failed"
+        ? "The automatic check could not read the full article. You can review the reference yourself and save notes below. " + g.error
+        : g.status === "ready" ? "Source text is saved below. Compare it with the track credits before making corrections." : "The linked page is checked when you load sources.";
+  $("#gamekee-link").href = selectedUrl;
+  $("#gamekee-link").hidden = !/^https:\/\/www\.gamekee\.com\/ba\/[1-9]\d*\.html$/.test(selectedUrl);
+  $("#retry-gamekee").disabled = state.job.running || !selectedUrl;
+  $("#gamekee-evidence").hidden = !sameReference || !(g.text || g.cached_text);
+  $("#gamekee-text").textContent = !sameReference ? "" : g.text || (g.cached_text ? "Previously saved content (latest fetch failed):\n\n" + g.cached_text : "");
+  $("#gamekee-summary").hidden = !sameReference || (!g.summary && !g.article?.title);
+  $("#gamekee-article-title").textContent = sameReference ? g.article?.title || "" : "";
+  $("#gamekee-article-summary").textContent = sameReference ? g.summary || "" : "";
+}
+
 async function api(path, method = "GET", body) {
   const response = await fetch(reviewPrefix + path, {method, headers: body === undefined ? {} : {"Content-Type":"application/json"}, body: body === undefined ? undefined : JSON.stringify(body)});
   const result = await response.json().catch(() => ({}));
@@ -31,6 +119,10 @@ function updateSaveStatus() {
   $("#save").disabled = !dirty() || saving;
   $("#save").textContent = saving ? "Saving…" : "Save changes";
   $("#save-status").textContent = saving ? "Saving your review…" : dirty() ? "You have unsaved changes" : "All changes saved locally";
+  if (review) {
+    renderOperatorStep();
+    renderGamekee(review);
+  }
 }
 
 function field(trackId, name, label, value, type = "text") {
@@ -106,7 +198,7 @@ function createTrack(track) {
 }
 
 function setBadge(element, status, customLabel) {
-  element.classList.remove("pending", "ready", "failed", "running", "excluded", "review", "included", "skipped");
+  element.classList.remove("pending", "ready", "failed", "running", "excluded", "review", "included", "skipped", "missing_reference");
   element.classList.add("badge", status);
   element.textContent = customLabel || statusLabels[status] || status;
 }
@@ -128,7 +220,7 @@ function renderPublished(state) {
   progress.hidden = !attempt || attempt.destination !== publication.destination;
   $("#progress-explanation").hidden = progress.hidden;
   if (!progress.hidden) {
-    const statusNames = {not_sent:"Not sent", sending:"Sending", saved:"Saved", unchanged:"Already matches", conflict:"Conflict", failed:"Unconfirmed · check / retry"};
+    const statusNames = {not_sent:"Not sent", sending:"Sending", saved:"Saved", unchanged:"Already matches", conflict:"Conflict", failed:"Unconfirmed · check / retry", unconfirmed:"Unconfirmed · check / retry"};
     progress.innerHTML = attempt.records.map(item => {
       const status = item.status === "sending" && !(state.job.running && state.job.action === "publish") ? "failed" : item.status;
       return `<li class="progress-${status}"><span>${escapeHtml(item.record === "album" ? "Album" : state.tracks.find(t => t.id === item.record)?.fields.title || `Track ${item.record}`)}</span><strong>${escapeHtml(statusNames[status])}</strong></li>`;
@@ -217,7 +309,7 @@ function render(state) {
   $("#fetch").disabled = busy;
   $("#fetch").textContent = state.tracks.some(t => t.source) ? "Reload Kivo details" : "Load Kivo details";
   $("#include").disabled = busy || album.decision === "included";
-  $("#include").textContent = album.decision === "included" ? "Album included ✓" : "Include album";
+  $("#include").textContent = album.decision === "included" ? "Included for review ✓" : "Include for review";
   $("#skip").disabled = busy || album.decision === "skipped";
   $("#prepare").disabled = busy || album.decision !== "included";
   $("#refresh-media").disabled = busy || album.decision !== "included";
@@ -225,10 +317,8 @@ function render(state) {
   const cover = album.cover;
   const publication = state.publication || {status:"pending", message:"Not published.", enabled:false};
   renderPublished(state);
-  $("#publish-message").textContent = publication.message;
-  const selectedTracks = state.tracks.filter(t => t.included && t.publish_selected && t.source_id);
-  $("#publish").disabled = busy || !publication.enabled || album.decision !== "included" || cover.status !== "ready" || !selectedTracks.length || selectedTracks.some(t => t.media.status !== "ready");
-  $("#publish").textContent = busy && state.job.action === "publish" ? "Publishing…" : publication.status === "ready" ? "Publish again safely" : "Publish reviewed album";
+  $("#publish-message").textContent = `Last publication status: ${publication.message}`;
+  $("#publish").textContent = busy && state.job.action === "publish" ? "Publishing…" : "Publish selected tracks";
   $("#job-message").textContent = state.job.message;
   $("#cover-status").textContent = cover.error ? "Cover: " + cover.error + (cover.status === "ready" ? " Previous validated cover retained." : "") : cover.status === "ready" ? "Cover ready · original preserved · 400 px and 800 px copies saved" : "Cover: " + (statusLabels[cover.status] || cover.status);
   if (cover.status === "ready") {
@@ -264,7 +354,7 @@ function render(state) {
     checkbox.disabled = busy;
     const publicationCheckbox = $("[data-publication]", card);
     publicationCheckbox.checked = track.publish_selected;
-    publicationCheckbox.disabled = busy || (!track.publish_selected && (!track.included || track.media.status !== "ready"));
+    publicationCheckbox.disabled = busy || (!track.publish_selected && (!track.included || track.media.status !== "ready" || track.pending_index || mediaNeedsRefresh(track)));
     const audioArea = $(".audio-area", card);
     if (track.media.status === "ready") {
       const url = track.media.preview_url + "?v=" + track.media.sha256;
@@ -285,10 +375,8 @@ function render(state) {
     const warnings = [];
     if (track.index_warning) warnings.push(track.index_warning);
     if (track.missing_index) warnings.push("Not in the latest source index. Saved track, files and publication are retained.");
-    if (track.fields.position == null) warnings.push("Official track number is unknown; the app will use display order without inventing a track number.");
     if (track.source_error) warnings.push("Kivo: " + track.source_error + (track.source ? " Saved source information is retained." : ""));
     if (track.media.error) warnings.push("Preparation: " + track.media.error);
-    if (!track.fields.composer.length) warnings.push("Composer not filled yet. File tags may help after preparation, or you can add it manually.");
     if (track.fields.kind === "drama" && track.included) warnings.push("Marked as spoken drama. Uncheck this track to exclude it from preparation.");
     const container = $(".track-warnings", card);
     container.replaceChildren(...warnings.map(message => { const p = document.createElement("p"); p.className = "warning-text"; p.textContent = message; return p; }));
@@ -296,14 +384,6 @@ function render(state) {
     $(".kivo-evidence", card).textContent = JSON.stringify({detail:track.source, index:track.index, incomingIndex:track.pending_index}, null, 2);
     $(".tag-evidence", card).textContent = Object.keys(track.tags).length ? JSON.stringify(track.tags, null, 2) : "Audio tags are read after the file is downloaded and validated.";
   }
-  const g = state.gamekee;
-  setBadge($("#gamekee-status"), g.status, {pending:"Not checked", ready:"Available", failed:"Manual reference available"}[g.status]);
-  $("#gamekee-message").textContent = g.status === "failed" ? "The automatic check could not read this page. You can open it and enter the details manually. " + g.error : g.status === "ready" ? "Source text is saved below. Compare it with the track credits before making corrections." : "The matching album is checked when you load sources.";
-  $("#gamekee-link").href = g.url;
-  $("#gamekee-link").hidden = !g.url;
-  $("#retry-gamekee").disabled = busy;
-  $("#gamekee-evidence").hidden = !(g.text || g.cached_text);
-  $("#gamekee-text").textContent = g.text || (g.cached_text ? "Previously saved content (latest fetch failed):\n\n" + g.cached_text : "");
   updateSaveStatus();
 }
 

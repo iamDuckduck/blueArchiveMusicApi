@@ -3,15 +3,23 @@
 import json
 import hashlib
 import mimetypes
+from datetime import date
 from pathlib import Path
 
 import requests
 
 from store import find_track, now
+from sources import absolute_url
 
 
 class PublicationConflict(ValueError):
     pass
+
+
+def needs_media_refresh(track):
+    source_url = (track.get("source") or {}).get("file")
+    return bool(source_url and track["media"].get("status") == "ready"
+                and absolute_url(source_url) != track["media"].get("source_url"))
 
 
 class Publisher:
@@ -173,12 +181,32 @@ class Publisher:
             raise ValueError("Set CATALOG_IMPORT_API_KEY before publishing.")
         if state["album"]["decision"] != "included":
             raise ValueError("Include the album before publishing.")
+        album_fields = state["album"]["fields"]
+        for field in ["title", "category"]:
+            if not album_fields[field].strip() or len(album_fields[field]) > 255:
+                raise ValueError(f"Enter an album/collection {field} between 1 and 255 characters before publishing.")
+        if album_fields["release_date"]:
+            try:
+                parsed = date.fromisoformat(album_fields["release_date"])
+                if parsed.isoformat() != album_fields["release_date"]:
+                    raise ValueError()
+            except ValueError:
+                raise ValueError("Use a valid YYYY-MM-DD release date, or leave it blank if unknown.")
         files = state["album"]["cover"].get("files", {})
         if state["album"]["cover"].get("status") != "ready" or not {"original", "400", "800"} <= files.keys():
             raise ValueError("Prepare the album cover before publishing.")
         tracks = [t for t in state["tracks"] if t["publish_selected"] and t["included"] and t["source_id"] is not None]
         if not tracks:
             raise ValueError("Select at least one prepared music track for publication.")
+        for track in tracks:
+            if not track["fields"]["title"].strip() or len(track["fields"]["title"]) > 255:
+                raise ValueError(f"Enter a title between 1 and 255 characters for selected track {track['id']} before publishing.")
+            if track["fields"]["kind"] == "drama":
+                raise ValueError("Spoken drama cannot be published as music.")
+        if any(t.get("pending_index") for t in tracks):
+            raise ValueError("The source index changed. Reload Kivo details and review the selected tracks before publishing.")
+        if any(needs_media_refresh(t) for t in tracks):
+            raise ValueError("A selected track's source audio URL changed. Prepare it again before publishing; the previous validated file is retained.")
         if any(t["media"].get("status") != "ready" or not t["media"].get("path") for t in tracks):
             raise ValueError("Every track selected for publication must be prepared. Leave missing tracks unselected to publish available music.")
         if any(t.get("pending_suggestions") for t in tracks):

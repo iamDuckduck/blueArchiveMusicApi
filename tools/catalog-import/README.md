@@ -1,5 +1,9 @@
 # Local catalog review
 
+Reviewed base: `review/catalog-import-approved`. Follow-up work is on
+`feature/catalog-pipeline-finish`. Start with the [short operator guide](OPERATOR-GUIDE.md),
+then [progress and remaining work](PIPELINE.md) or the [17-chapter reading guide](HISTORY.md).
+
 Requires Python 3.11+, FFmpeg and FFprobe on PATH. From this directory:
 
 ```powershell
@@ -7,10 +11,10 @@ python -m pip install -r requirements.txt
 python app.py
 ```
 
-Open http://127.0.0.1:8765. Load Kivo details, include the Veritas album,
-prepare its audio and artwork, review the source evidence and edit the credits.
-Save changes to keep your corrections across restarts. The page previews the
-validated audio and keeps the spoken drama reference excluded.
+Open http://127.0.0.1:8765/catalog. Scan Kivo, choose an official release or
+official-song collection, prepare selected tracks, then save your review.
+Preparation and saving are local; publication is a separate action. The original
+Veritas sample remains at `/`. Spoken drama is excluded.
 
 Fetching reads source metadata and file URLs. Preparation downloads and validates
 those files, reads embedded tags and creates 400/800 px cover copies. GameKee
@@ -25,14 +29,34 @@ persistence and local browser-API tests. Fixtures and temporary files keep these
 tests independent from live source services.
 
 The browser tool discovers release candidates and keeps separate saved reviews
-and media for each release, alongside the original Veritas sample. Detailed
-per-field incoming-change review remains a later chapter.
+and media for each release, alongside the original Veritas sample. Source-change
+review and published-version comparison are included through chapter 16.
 
 ## Backend development and media storage
 
+### Which environment am I using?
+
+| Purpose | Database | Media destination |
+| --- | --- | --- |
+| Ordinary automated tests | Test-only H2 / temporary SQLite reviews | Mocked storage and temporary files; no cloud bucket |
+| Full-pipeline failure/retry tests (chapter 17) | Separate local PostgreSQL: `catalog_import_verify` | Separate local MinIO bucket: `catalog-import-verify` |
+| Everyday development, including manually testing the app | Development PostgreSQL | Dedicated **development R2 bucket** |
+| Production | Production database | Separate **production R2 bucket** |
+
+MinIO runs on your computer in Docker and provides an S3-compatible storage API.
+Its test bucket is not a Cloudflare R2 bucket. You do not need to create another
+Cloudflare bucket for chapter 17. Manual app testing remains part of development;
+MinIO belongs to the separate verification setup, which can also support a
+deliberate browser check against those same test services.
+
+The explicit real-R2 smoke check below is an exception to offline tests: it uses
+the development R2 bucket to check the actual cloud configuration.
+
+### Set up everyday development
+
 Everyday local development and manual testing use the normal `dev` profile:
 development PostgreSQL and a dedicated development R2 bucket. There is
-no separate H2/local-media application profile or `/media/` route in this chapter.
+no separate H2/local-media backend profile or backend `/media/` route.
 Production uses the `prod` profile with its own database and R2 settings.
 
 Load the backend's ignored environment file through your IDE/run configuration;
@@ -41,7 +65,8 @@ variables (never commit real credentials):
 
 ```dotenv
 SPRING_PROFILES_ACTIVE=dev
-POSTGRES_DATASOURCE_URL=jdbc:postgresql://localhost:5432/<development-database>
+POSTGRES_DB=<development-database>
+POSTGRES_DATASOURCE_URL=jdbc:postgresql://localhost:5433/<development-database>
 POSTGRES_USER=<development-user>
 POSTGRES_PASSWORD=<development-password>
 R2_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
@@ -49,6 +74,10 @@ R2_BUCKET=bluearchive-music-dev
 R2_ACCESS_KEY=<development-bucket-only-access-key>
 R2_SECRET_KEY=<development-bucket-only-secret>
 ```
+
+The bundled `compose.yaml` exposes PostgreSQL on host port `5433` and uses
+`POSTGRES_DB` to choose its database. Keep the URL's database name consistent.
+If you manage PostgreSQL elsewhere, use that service's actual host/port instead.
 
 Use a token scoped only to the development bucket. Profile names do not enforce
 isolation: check database and bucket values before a run. Do not load production
@@ -87,10 +116,100 @@ Storage was introduced in chapter 5, the import API in chapter 6, and the
 review tool's Publish button in chapter 7.
 The later frontend media resolver needs `VITE_PUBLIC_MEDIA_BASE_URL` pointing to
 the development bucket's public URL, not the authenticated R2 upload endpoint.
-Never expose R2 credentials in frontend variables. Full publish/playback and
-PostgreSQL verification must be repeated when those later chapters are reviewed.
+Never expose R2 credentials in frontend variables. Chapter 17 below verifies the
+backend/storage flow with PostgreSQL/MinIO; development-R2 browser playback is
+still a separate check.
+
+## Full-pipeline verification (chapter 17)
+
+This is a separate automated test setup, not a replacement for development R2.
+The intended local services are PostgreSQL on `127.0.0.1:15433`, MinIO on
+`127.0.0.1:19000`, and a verification backend on `127.0.0.1:18082`. They use
+their own Docker project, database and storage volumes.
+
+### What a run will do
+
+1. Copy the prepared Veritas SQLite review and media. Leave the original alone.
+2. Validate applied backend migrations and apply missing ones against the test
+   PostgreSQL database. Existing test records are retained.
+3. Publish the album, but deliberately discard its successful response.
+4. Retry, let the first track succeed, and deliberately reject the second track.
+5. Restart the backend and retry again. Check that record IDs, media and the
+   existing play count survive without duplicates within that run.
+6. Check audio byte-range responses, cover types, track order and revision
+   conflicts, then write a result report.
+
+Each complete run uses a new test release identity and retains its test data.
+Retries inside that run reuse the same identity. Stopping the containers does
+not delete their database/media volumes; cleanup is a separate deliberate action.
+
+### Run the verification
+
+Requires Docker, Java/Maven, the Python dependencies above, free verification
+ports, and a prepared/included Veritas review with tracks 255/256 selected and
+source proposals resolved. The fake conflict UI demo is not suitable input.
+Stop editing the source review while copying it. The verifier checks its identity,
+selections and file hashes read-only before creating a separate run directory.
+
+From the backend root in PowerShell, start only the local test project (not the
+normal development Compose file). The explicit Docker host avoids a saved remote
+Docker context; on Linux use `unix:///var/run/docker.sock` instead.
+
+```powershell
+$verifyDockerHost = 'npipe:////./pipe/docker_engine'
+docker --host $verifyDockerHost compose -p catalog-import-verify -f tools/catalog-import/compose.verify.yaml up -d
+docker --host $verifyDockerHost exec -e MC_HOST_verify=http://catalog_verify:catalog-verify-local-only@127.0.0.1:9000 catalog-import-verify-storage-1 mc mb --ignore-existing verify/catalog-import-verify
+docker --host $verifyDockerHost exec -e MC_HOST_verify=http://catalog_verify:catalog-verify-local-only@127.0.0.1:9000 catalog-import-verify-storage-1 mc anonymous set download verify/catalog-import-verify
+$env:CATALOG_R2_SMOKE = 'false'
+mvn package
+python tools/catalog-import/verify_live.py --review '<path-to-prepared-Veritas-review>'
+```
+
+Run each command only after the previous one succeeds. The fixed local bucket
+permits anonymous downloads for the HTTP media checks, not anonymous uploads.
+Do not use `mvn clean`: ignored `target/` can contain saved reviews and evidence.
+
+The verifier starts/stops its own API with the standalone `catalog-verify`
+profile. It pins the effective database/storage properties on the Java command
+line and limits inherited environment variables; no development/production R2
+credentials are needed. It also targets only the local Docker engine and bypasses
+HTTP proxy settings for loopback requests. Start it through the verifier, not a
+bare profile-only Java command: profile names alone do not enforce isolation.
+
+Reports, backend logs and the copied review stay under ignored
+`target/catalog-live-*/`. The verifier stops its API even on failure. Stop the
+two test containers afterward without deleting their data:
+
+```powershell
+docker --host $verifyDockerHost compose -p catalog-import-verify -f tools/catalog-import/compose.verify.yaml stop
+```
+
+MinIO tests the backend's S3-compatible storage path, not Cloudflare-specific
+credentials, public URLs or CORS. Keep the separate development-R2 smoke check
+and browser playback check. HTTP audio-range checks alone do not prove that the
+frontend player works. Current results and limitations are recorded in
+[PIPELINE.md](PIPELINE.md), separately from the original branch's historical checks.
 
 ## Reviewed import API (chapter 6)
+
+### Verify another prepared candidate locally
+
+After starting the same fixed PostgreSQL/MinIO services above, use:
+
+```powershell
+python tools/catalog-import/verify_candidate.py --review '<prepared candidate review directory>' --tracks 197 198
+```
+
+This creates a disposable verification copy and publishes only to the fixed local
+test environment. `--tracks` selects test inputs; it does not change the owner's
+publication checkboxes or authorize development-R2 publication. The source review
+must be included, prepared and free of unresolved source changes. Reports and
+copies remain in `target/catalog-candidate-*/`. The verifier checks persisted
+retries, no duplicate records/media, category, optional numbering and public media
+delivery. It stops its owned backend and leaves test data for inspection.
+
+Browser playback is a separate check. The 2026-09-20 `Thanks to` check passed in
+the existing frontend against this local test environment; see [progress](PIPELINE.md).
 
 Set `ADMIN_API_KEY` in the backend environment. Calls require that value in the
 `X-Admin-Api-Key` header. Publish the album before its tracks:
@@ -182,8 +301,8 @@ response is saved locally. If a later track fails, earlier successes remain;
 retrying sends the same identities again so the API can reuse records and media.
 Fetching, preparation and saving edits alone do not publish anything.
 
-These tests mock the HTTP backend. Full PostgreSQL/R2/browser verification of this
-reviewed flow remains separate; this chapter does not prove live app playback.
+The publisher's unit tests mock the HTTP backend. Chapter 17 adds real
+PostgreSQL/MinIO retry verification; actual R2/browser playback remains separate.
 ## Discover candidates
 
 Open `/catalog` and scan Kivo to read every index page. Include, skip or mark candidates as source groupings. Failed or inconsistent scans retain the previous complete scan. Open a release candidate's saved review to inspect and correct it separately.
@@ -214,7 +333,10 @@ they are not automatically included for preparation or selected for publication.
 
 ## Map release appearances
 
-Create an identified official release and map selected source tracks into it. The same recording can have separate album appearances. Link renamed source labels to existing releases without discarding saved reviews.
+Create an identified official release or named collection of official songs and
+map selected source tracks into it. A formal album is not required, and unknown
+dates/numbers stay blank. The same recording can have separate album appearances.
+Link renamed source labels to existing releases without discarding saved reviews.
 
 ## Refresh source and media
 

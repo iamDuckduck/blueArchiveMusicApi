@@ -85,6 +85,7 @@ function createTrack(track) {
   }
   element.innerHTML = header + `
     <label class="inclusion"><input type="checkbox" data-inclusion="${track.id}"> Include this music track in preparation</label>
+    <label class="inclusion"><input type="checkbox" data-publication="${track.id}"> Publish this reviewed track (after preparation)</label>
     <div class="track-fields">
       <div class="wide">${field(track.id, "title", "Track title", f.title)}</div>
       <div class="track-order wide">${field(track.id, "disc", "Disc", f.disc, "number")}${field(track.id, "position", "Track", f.position, "number")}
@@ -123,8 +124,13 @@ function render(state) {
   $("#skip").disabled = busy || album.decision === "skipped";
   $("#prepare").disabled = busy || album.decision !== "included";
   $("#prepare").textContent = busy && state.job.action === "prepare" ? "Preparing files…" : "Prepare / retry tracks";
-  $("#job-message").textContent = state.job.message;
   const cover = album.cover;
+  const publication = state.publication || {status:"pending", message:"Not published.", enabled:false};
+  $("#publish-message").textContent = publication.message;
+  const selectedTracks = state.tracks.filter(t => t.included && t.publish_selected && t.source_id);
+  $("#publish").disabled = busy || !publication.enabled || album.decision !== "included" || cover.status !== "ready" || !selectedTracks.length || selectedTracks.some(t => t.media.status !== "ready");
+  $("#publish").textContent = busy && state.job.action === "publish" ? "Publishing…" : publication.status === "ready" ? "Publish again safely" : "Publish reviewed album";
+  $("#job-message").textContent = state.job.message;
   $("#cover-status").textContent = cover.status === "ready" ? "Cover ready · original preserved · 400 px and 800 px copies saved" : cover.error ? "Cover: " + cover.error : "Cover: " + (statusLabels[cover.status] || cover.status);
   if (cover.status === "ready") {
     const coverKey = cover.files["400"].sha256;
@@ -156,6 +162,9 @@ function render(state) {
     const checkbox = $("[data-inclusion]", card);
     checkbox.checked = track.included;
     checkbox.disabled = busy;
+    const publicationCheckbox = $("[data-publication]", card);
+    publicationCheckbox.checked = track.publish_selected;
+    publicationCheckbox.disabled = busy || (!track.publish_selected && (!track.included || track.media.status !== "ready"));
     const audioArea = $(".audio-area", card);
     if (track.media.status === "ready") {
       const url = track.media.preview_url + "?v=" + track.media.sha256;
@@ -239,6 +248,7 @@ $("#review-form").addEventListener("click", event => {
 });
 $("#review-form").addEventListener("change", event => {
   if (event.target.dataset.inclusion) act(`/api/tracks/${event.target.dataset.inclusion}/inclusion`, {included:event.target.checked});
+  if (event.target.dataset.publication) act(`/api/tracks/${event.target.dataset.publication}/publication`, {selected:event.target.checked});
 });
 $("#review-form").addEventListener("submit", async event => {
   event.preventDefault();
@@ -247,6 +257,7 @@ $("#review-form").addEventListener("submit", async event => {
 });
 $("#fetch").addEventListener("click", () => act("/api/jobs/fetch"));
 $("#prepare").addEventListener("click", () => act("/api/jobs/prepare"));
+$("#publish").addEventListener("click", () => act("/api/jobs/publish"));
 $("#retry-gamekee").addEventListener("click", () => act("/api/jobs/gamekee"));
 $("#include").addEventListener("click", () => act("/api/decision", {decision:"included"}));
 $("#skip").addEventListener("click", () => act("/api/decision", {decision:"skipped"}));

@@ -4,12 +4,13 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from PIL import Image
 
 from app import create_app
 from media import digest, inspect_audio, prepare_audio, prepare_cover, resize_cover
+from publisher import Publisher
 from service import ReviewService
 from sources import content_text, cv_names, fetch_gamekee, suggestions_from_kivo, suggestions_from_tags
 from store import Store, find_track
@@ -214,6 +215,89 @@ class ServiceTests(unittest.TestCase):
             self.service.start("fetch")
             self.service.thread.join(5)
             gamekee.assert_called_once()
+
+
+class PublisherTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.store = Store(self.temp.name)
+        root = Path(self.temp.name)
+        for relative in ["media/cover/original.png", "media/cover/cover-400.jpg",
+                         "media/cover/cover-800.jpg", "media/255/audio.mp3", "media/256/audio.mp3"]:
+            target = root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(b"media")
+        self.store.update(lambda state: self._ready(state))
+
+    def _ready(self, state):
+        state["album"].update(decision="included", cover={"status":"ready", "files":{
+            "original":{"path":"media/cover/original.png"},
+            "400":{"path":"media/cover/cover-400.jpg"},
+            "800":{"path":"media/cover/cover-800.jpg"}}})
+        find_track(state, 255)["media"] = {"status":"ready", "path":"media/255/audio.mp3"}
+        find_track(state, 256)["media"] = {"status":"ready", "path":"media/256/audio.mp3"}
+
+    def test_reviewed_release_uses_stable_put_urls_and_records_results(self):
+        responses = []
+        for album_id, song_id in [(7, None), (7, 8), (7, 9)]:
+            response = Mock(ok=True, status_code=200)
+            response.json.return_value = {"albumId":album_id, "songId":song_id, "status":"created"}
+            responses.append(response)
+        with patch("publisher.requests.put", side_effect=responses) as put:
+            result = Publisher(self.store, "http://127.0.0.1:8080", "secret").publish()
+        self.assertEqual(result["status"], "ready")
+        self.assertEqual(put.call_count, 3)
+        self.assertTrue(put.call_args_list[0].args[0].endswith("/kivo/albums/veritas-vol-2"))
+        self.assertTrue(put.call_args_list[1].args[0].endswith("/kivo/albums/veritas-vol-2/tracks/255"))
+
+    def test_publish_failure_is_visible_and_retryable(self):
+        failing = Mock()
+        failing.publish.side_effect = ValueError("track failed")
+        service = ReviewService(self.store, failing)
+        service.start("publish")
+        service.thread.join(5)
+        publication = self.store.read()["publication"]
+        self.assertEqual(publication["status"], "failed")
+        self.assertIn("Safe to retry", publication["message"])
+
+    def test_partial_success_survives_restart_and_retry_uses_same_urls(self):
+        def response(album_id, song_id):
+            result = Mock(status_code=200)
+            result.json.return_value = {"albumId": album_id, "songId": song_id, "status": "updated"}
+            return result
+
+        failure = Mock(status_code=500, text="temporary track failure")
+        with patch("publisher.requests.put", side_effect=[response(7, None), response(7, 8), failure]) as put:
+            with self.assertRaisesRegex(ValueError, "500"):
+                Publisher(self.store, "http://127.0.0.1:8080", "secret").publish()
+            original_urls = [call.args[0] for call in put.call_args_list]
+
+        reopened = Store(self.temp.name)
+        saved = reopened.read()["publication"]
+        self.assertEqual(saved["album"]["albumId"], 7)
+        self.assertEqual(saved["tracks"]["255"]["songId"], 8)
+        self.assertNotIn("256", saved["tracks"])
+        with patch("publisher.requests.put", side_effect=[response(7, None), response(7, 8), response(7, 9)]) as put:
+            result = Publisher(reopened, "http://127.0.0.1:8080", "secret").publish()
+            self.assertEqual([call.args[0] for call in put.call_args_list], original_urls)
+            self.assertTrue(all(call.kwargs["allow_redirects"] is False for call in put.call_args_list))
+        self.assertEqual(result["status"], "ready")
+        self.assertEqual(result["tracks"]["255"]["songId"], 8)
+        self.assertEqual(result["tracks"]["256"]["songId"], 9)
+
+
+    def test_available_selected_track_publishes_while_missing_track_remains_visible(self):
+        self.store.update(lambda s: find_track(s, 256).update(publish_selected=False, media={"status":"failed", "error":"Missing audio"}))
+        response = Mock(status_code=200)
+        response.json.return_value = {"albumId":7, "songId":8, "status":"created"}
+        with patch("publisher.requests.put", return_value=response) as put:
+            Publisher(self.store, "http://127.0.0.1:8080", "secret").publish()
+        self.assertEqual(put.call_count, 2)
+        missing = find_track(self.store.read(), 256)
+        self.assertTrue(missing["included"])
+        self.assertEqual(missing["media"]["error"], "Missing audio")
+        self.assertEqual(put.call_args_list[1].kwargs["files"]["audio"][2], "audio/mpeg")
 
 
 class BrowserApiTests(unittest.TestCase):

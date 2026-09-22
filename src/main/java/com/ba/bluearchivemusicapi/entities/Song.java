@@ -19,7 +19,8 @@ import java.util.stream.Collectors;
 @Entity
 @Builder
 @EntityListeners(AuditingEntityListener.class)
-@Table(name = "song")
+@Table(name = "song", uniqueConstraints = @UniqueConstraint(
+        name = "uq_song_import_identity", columnNames = {"album_id", "import_source", "source_track_id"}))
 public class Song {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -34,11 +35,26 @@ public class Song {
     @Column(name = "audio_path")
     private String audioPath;
 
-    @Column(name = "description")
+    @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
     @Column(name = "play_count")
     private Long playCount;
+
+    @Column(name = "disc_number")
+    private Integer discNumber;
+
+    @Column(name = "track_number")
+    private Integer trackNumber;
+
+    @Column(name = "import_source", length = 64)
+    private String importSource;
+
+    @Column(name = "source_track_id", length = 255)
+    private String sourceTrackId;
+
+    @Column(name = "music_kind", length = 32)
+    private String musicKind;
 
     @CreatedDate
     @Column(name = "created_date")
@@ -52,7 +68,7 @@ public class Song {
     @JoinColumn(name = "album_id")
     private Album album;
 
-    @OneToMany(mappedBy = "song", cascade = CascadeType.PERSIST)
+    @OneToMany(mappedBy = "song", cascade = CascadeType.ALL, orphanRemoval = true)
     @BatchSize(size = 50)
     @Builder.Default
     private List<SongArtist> songArtists = new ArrayList<>();

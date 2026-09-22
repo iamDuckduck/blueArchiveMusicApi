@@ -49,6 +49,7 @@ def initial_review():
         "tracks": tracks,
         "gamekee": {"status": "pending", "url": "https://www.gamekee.com/ba/691994.html"},
         "release_reference": "https://ototoy.jp/_/default/p/1938374",
+        "publication": {"status": "pending", "message": "Not published."},
         "job": {"running": False, "message": "Load source information to begin."},
         "saved_at": now(),
     }
@@ -77,11 +78,15 @@ class Store:
 
     @staticmethod
     def _recover(state):
+        state.setdefault("publication", {"status": "pending", "message": "Not published."})
         if state["job"].get("running"):
             state["job"] = {"running": False, "message": "Preparation was interrupted. Retry to continue."}
         for item in [state["album"]["cover"], *(t["media"] for t in state["tracks"])]:
             if item["status"] == "running":
                 item.update(status="failed", error="Interrupted. Retry to continue.")
+
+        for track in state["tracks"]:
+            track.setdefault("publish_selected", track["included"] and track["source_id"] is not None)
 
     def read(self):
         with self.lock, self.connect() as db:
@@ -142,6 +147,7 @@ class Store:
                 by_id[track_id]["edits"].update(values)
                 if values.get("kind") == "drama":
                     by_id[track_id]["included"] = False
+                    by_id[track_id]["publish_selected"] = False
 
         self.update(mutate)
 

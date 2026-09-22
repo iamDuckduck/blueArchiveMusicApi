@@ -9,8 +9,9 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 import java.util.Optional;
 
-public interface AlbumRepository extends JpaRepository<Album,String> {
+public interface AlbumRepository extends JpaRepository<Album,Long> {
     Optional<Album> findById(Long id);
+    Optional<Album> findByImportSourceAndSourceAlbumId(String importSource, String sourceAlbumId);
 
     @Query("SELECT DISTINCT a FROM Album a " +
            "LEFT JOIN FETCH a.category " +

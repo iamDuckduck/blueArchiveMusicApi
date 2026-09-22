@@ -8,19 +8,23 @@ from store import find_track, now
 
 
 class ReviewService:
-    def __init__(self, store):
+    def __init__(self, store, publisher=None):
         self.store = store
+        self.publisher = publisher
         self.job_lock = threading.Lock()
         self.thread = None
 
     def start(self, action):
-        if action not in {"fetch", "prepare", "gamekee"}:
+        if action not in {"fetch", "prepare", "gamekee", "publish"}:
             raise ValueError("Unknown action.")
         if not self.job_lock.acquire(blocking=False):
             raise ValueError("A preparation task is already running.")
         if action == "prepare" and self.store.read()["album"]["decision"] != "included":
             self.job_lock.release()
             raise ValueError("Include the album before preparing files.")
+        if action == "publish" and self.publisher is None:
+            self.job_lock.release()
+            raise ValueError("Publication is not configured. Start the tool with a backend URL and API key.")
         self.store.update(lambda s: s.update(job={"running": True, "action": action, "message": "Starting…", "started_at": now()}))
         self.thread = threading.Thread(target=self._run, args=(action,), daemon=True)
         self.thread.start()
@@ -35,10 +39,15 @@ class ReviewService:
                 self.fetch_gamekee()
             elif action == "gamekee":
                 self.fetch_gamekee(force=True)
+            elif action == "publish":
+                self.publisher.publish()
             else:
                 self.prepare()
             self.store.update(lambda s: s["job"].update(running=False, message="Finished. Review the results and any source or preparation warnings.", finished_at=now()))
         except Exception as error:
+            if action == "publish":
+                self.store.update(lambda s: s["publication"].update(
+                    status="failed", message=f"Publication stopped: {error}. Safe to retry."))
             self.store.update(lambda s: s["job"].update(running=False, message=f"Task stopped: {error}. Retry to continue.", finished_at=now()))
         finally:
             self.job_lock.release()

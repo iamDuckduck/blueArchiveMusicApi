@@ -8,8 +8,11 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface SongRepository extends JpaRepository<Song, Long> {
+    Optional<Song> findByAlbumIdAndImportSourceAndSourceTrackId(
+            Long albumId, String importSource, String sourceTrackId);
     @Query("SELECT s FROM Song s ORDER BY random()")
     List<Song> findRandomSong(Pageable pageable);
 

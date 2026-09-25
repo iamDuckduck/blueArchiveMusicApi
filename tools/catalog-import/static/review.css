@@ -677,8 +677,14 @@ summary {
   .decision-guide { grid-template-columns:1fr; gap:4px }
   .decision-guide dd { margin-bottom:10px }
   .sidebar {
-    display:none
+    position:static;
+    width:auto;
+    padding:16px;
+    border-right:0;
+    border-bottom:1px solid var(--line)
   }
+  .sidebar .brand { margin-bottom:12px }
+  .sidebar nav { display:flex; flex-wrap:wrap; gap:4px }
   main {
     margin:0
   }

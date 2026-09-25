@@ -6,7 +6,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='review.css') }}">
 </head>
 <body>
-  <aside class="sidebar"><a class="brand" href="/catalog">Blue Archive Music</a><a class="nav-item" href="/catalog">Album discovery</a><a class="nav-item active" href="/reviews">Saved reviews</a><div class="sidebar-note">Local drafts<p>Saving a review does not publish it.</p></div></aside>
+  {% with navigation_section='reviews' %}{% include '_navigation.html' %}{% endwith %}
   <main class="catalog-page"><header class="topbar"><span>Catalog / Saved reviews</span><a href="/catalog">Album discovery</a></header><div class="page-content">
     <h1>Pick up where you left off.</h1>
     <p>Your saved local reviews, including the original sample. Open one to continue reviewing; nothing is downloaded or published by this list.</p>

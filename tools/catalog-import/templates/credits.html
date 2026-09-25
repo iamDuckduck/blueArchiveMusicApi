@@ -8,7 +8,7 @@
   <script src="{{ url_for('static', filename='credits.js') }}" defer></script>
 </head>
 <body data-credits-enabled="{{ 'true' if credits_enabled else 'false' }}">
-  <aside class="sidebar"><a class="brand" href="/">Blue Archive Music</a><a class="nav-item" href="/catalog">Album discovery</a><a class="nav-item active" href="/credits">Credit aliases</a><a class="nav-item" href="/">Saved Veritas review</a><div class="sidebar-note">After publication<p>Alias changes are saved directly to the configured backend.</p></div></aside>
+  {% with navigation_section='credits' %}{% include '_navigation.html' %}{% endwith %}
   <main class="catalog-page"><header class="topbar"><span>Catalog / Credit aliases</span><a href="/catalog">Back to discovery</a></header><div class="page-content">
     <span class="eyebrow">AFTER PUBLICATION</span><h1>Make credits easier to find.</h1>
     <p>Add alternate spellings or language names to an existing published credit. Aliases improve music search; they do not rename or merge people, change song credits, or edit a local import draft.</p>

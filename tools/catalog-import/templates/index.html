@@ -9,15 +9,7 @@
   <script src="{{ url_for('static', filename='review.js') }}" defer></script>
 </head>
 <body data-review-prefix="{{ review_prefix or '' }}">
-  <aside class="sidebar">
-    <a class="brand" href="/catalog" aria-label="Blue Archive Music local review"><span class="brand-icon">♪</span><span>Blue Archive<span class="brand-sub">MUSIC COLLECTION</span></span></a>
-    <span class="eyebrow">YOUR WORKSPACE</span>
-    <a href="/catalog" class="nav-item"><span>▤</span> Album discovery</a>
-    <a href="/reviews" class="nav-item"><span>▤</span> Saved reviews</a>
-    <a href="#album" class="nav-item active"><span>▤</span> Current review</a>
-    <a href="/credits" class="nav-item"><span>♬</span> Credit aliases</a>
-    <div class="sidebar-note"><span class="local-dot"></span> Running locally<p>Edits and preparation stay here. Only Publish sends music to the backend.</p></div>
-  </aside>
+  {% with navigation_section='reviews', navigation_detail=true %}{% include '_navigation.html' %}{% endwith %}
   <main>
     <header class="topbar"><span><a href="/catalog">Catalog</a> <span class="divider">/</span> <a href="/reviews">Saved reviews</a> <span class="divider">/</span> Current review</span><span class="local-label">LOCAL WORKSPACE</span></header>
     <div class="page-content">

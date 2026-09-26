@@ -30,6 +30,19 @@ class SidebarLinks(HTMLParser):
 
 
 class NavigationTests(unittest.TestCase):
+    def test_review_section_links_resolve_and_keep_safety_guidance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            page = create_app(directory).test_client().get("/albums/veritas-vol-2/").get_data(as_text=True)
+            self.assertIn('aria-label="Review sections"', page)
+            self.assertNotIn('data-stage="scan"', page)
+            for target in ["album", "prep-heading", "track-review", "publish-heading"]:
+                self.assertIn(f'href="#{target}"', page)
+                self.assertIn(f'id="{target}"', page)
+            self.assertIn("Publishing changes the configured backend database and media destination.", page)
+            self.assertIn("Save changes keeps your local draft. It does not publish.", page)
+            self.assertIn("What does loading details do?", page)
+            self.assertIn("What gets published?", page)
+
     def test_shared_links_and_current_location_on_all_pages(self):
         with tempfile.TemporaryDirectory() as directory:
             app = create_app(directory)

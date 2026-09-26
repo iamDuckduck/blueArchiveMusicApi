@@ -1,8 +1,10 @@
 <aside class="sidebar">
-  <a class="brand" href="/catalog">Blue Archive Music</a>
+  <a class="brand" href="/catalog" aria-label="Blue Archive Music"><span class="brand-icon" aria-hidden="true">♪</span><span>Blue Archive<span class="brand-sub">MUSIC COLLECTION</span></span></a>
+  <span class="eyebrow">YOUR WORKSPACE</span>
   <nav aria-label="Workspace">
     {% for key, href, label in [('catalog', '/catalog', 'Albums'), ('credits', '/credits', 'Credit aliases')] %}
-    <a class="nav-item{{ ' active' if navigation_section == key else '' }}" href="{{ href }}"{% if navigation_section == key %} aria-current="{{ 'location' if navigation_detail|default(false) else 'page' }}"{% endif %}>{{ label }}</a>
+    <a class="nav-item{{ ' active' if navigation_section == key else '' }}" href="{{ href }}" aria-label="{{ label }}"{% if navigation_section == key %} aria-current="{{ 'location' if navigation_detail|default(false) else 'page' }}"{% endif %}><span aria-hidden="true">{{ '▤' if key == 'catalog' else '♬' }}</span>{{ label }}</a>
     {% endfor %}
   </nav>
+  <div class="sidebar-note"><span class="local-dot" aria-hidden="true"></span>Local workspace<p>Review drafts stay on this computer. Publishing sends music to the configured backend. Credit alias edits save there directly.</p></div>
 </aside>

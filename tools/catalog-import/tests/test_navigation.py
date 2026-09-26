@@ -10,6 +10,8 @@ class SidebarLinks(HTMLParser):
     def __init__(self, html):
         super().__init__()
         self.inside = False
+        self.in_link = False
+        self.explicit_label = False
         self.links = []
         self.feed(html)
 
@@ -18,13 +20,17 @@ class SidebarLinks(HTMLParser):
         if tag == "aside" and attrs.get("class") == "sidebar":
             self.inside = True
         if self.inside and tag == "a":
-            self.links.append({"href": attrs["href"], "current": attrs.get("aria-current"), "label": ""})
+            self.in_link = True
+            self.explicit_label = "aria-label" in attrs
+            self.links.append({"href": attrs["href"], "current": attrs.get("aria-current"), "label": attrs.get("aria-label", "")})
 
     def handle_data(self, data):
-        if self.inside and self.links:
+        if self.inside and self.in_link and not self.explicit_label:
             self.links[-1]["label"] += data.strip()
 
     def handle_endtag(self, tag):
+        if tag == "a":
+            self.in_link = False
         if tag == "aside":
             self.inside = False
 
@@ -60,6 +66,9 @@ class NavigationTests(unittest.TestCase):
                 with self.subTest(url=url):
                     response = client.get(url)
                     self.assertEqual(response.status_code, 200)
+                    for decoration in ['class="brand-icon"', 'class="brand-sub"', 'YOUR WORKSPACE', 'class="sidebar-note"']:
+                        self.assertIn(decoration, response.get_data(as_text=True))
+                    self.assertIn("Credit alias edits save there directly.", response.get_data(as_text=True))
                     links = SidebarLinks(response.get_data(as_text=True)).links
                     self.assertEqual([(link["href"], link["label"]) for link in links], expected)
                     self.assertEqual([(link["href"], link["current"]) for link in links if link["current"]],

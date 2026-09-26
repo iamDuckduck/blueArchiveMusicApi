@@ -46,7 +46,7 @@
 #publication-progress .progress-saved strong,#publication-progress .progress-unchanged strong { color:var(--green) }
 #publication-progress .progress-conflict strong,#publication-progress .progress-failed strong { color:var(--amber) }
 #publication-progress .progress-unconfirmed strong { color:var(--amber) }
-.workflow-steps { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px; padding:0; margin:0 0 18px; list-style:none }
+.workflow-steps { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; padding:0; margin:0 0 18px; list-style:none }
 .workflow-steps li { border:1px solid var(--line); border-radius:8px; background:var(--surface); padding:12px; min-width:0 }
 .workflow-steps a { display:block; color:inherit; text-decoration:none }
 .workflow-steps strong { display:block; font-size:12px }

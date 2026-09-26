@@ -60,7 +60,7 @@ class OfficialSongCollectionTests(unittest.TestCase):
             self.assertIn(text, discovery)
             self.assertIn(text, page)
         self.assertIn("Scanning does not download or publish music.", discovery)
-        self.assertIn("Import stages", page)
+        self.assertIn("Review sections", page)
         self.assertIn("What do these choices mean?", discovery)
         self.assertIn("Save changes keeps your local draft. It does not publish.", page)
         self.assertLess(page.index('id="tracks"'), page.index('id="publish-heading"'))

@@ -16,7 +16,13 @@ python app.py
 Open http://127.0.0.1:8765/catalog. Scan Kivo, choose an official release or
 official-song collection, prepare selected tracks, then save your review.
 Preparation and saving are local; publication is a separate action. The original
-Veritas sample remains at `/`. Spoken drama is excluded.
+Veritas sample is available at `/albums/veritas-vol-2/`. Spoken drama is excluded.
+
+The home URL `/` now opens **Albums**: discovery and saved drafts in one list.
+Use **All**, **New**, **Saved reviews**, or **Skipped** to filter it. **Start review**
+includes a candidate and opens its review; **Continue review** resumes the same draft.
+Source groups and linked labels remain separately inspectable. The old `/reviews`
+bookmark redirects to the saved filter. Saved means a local draft, not published.
 
 Fetching reads source metadata and file URLs. Preparation downloads and validates
 those files, reads embedded tags and creates 400/800 px cover copies. GameKee

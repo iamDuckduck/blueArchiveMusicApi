@@ -9,9 +9,9 @@
   <script src="{{ url_for('static', filename='review.js') }}" defer></script>
 </head>
 <body data-review-prefix="{{ review_prefix or '' }}">
-  {% with navigation_section='reviews', navigation_detail=true %}{% include '_navigation.html' %}{% endwith %}
+  {% with navigation_section='catalog', navigation_detail=true %}{% include '_navigation.html' %}{% endwith %}
   <main>
-    <header class="topbar"><span><a href="/catalog">Catalog</a> <span class="divider">/</span> <a href="/reviews">Saved reviews</a> <span class="divider">/</span> Current review</span><span class="local-label">LOCAL WORKSPACE</span></header>
+    <header class="topbar"><span><a href="/catalog">Albums</a> <span class="divider">/</span> Current review</span><span class="local-label">LOCAL WORKSPACE</span></header>
     <div class="page-content">
       <div class="page-heading"><div><span class="eyebrow">PREPARE YOUR COLLECTION</span><h1>Review, then publish.</h1><p>One album, single, or named song collection at a time.</p></div><span id="album-status" class="badge">Needs review</span></div>
       <ol class="workflow-steps" aria-label="Import stages"><li data-stage="scan"><a href="/catalog"><strong>1 · Scan</strong><span>Find source groups</span></a></li><li data-stage="include"><a href="#album"><strong>2 · Include</strong><span>Choose music to review</span></a></li><li data-stage="prepare"><a href="#prep-heading"><strong>3 · Prepare</strong><span>Download local files</span></a></li><li data-stage="review"><a href="#track-review"><strong>4 · Review</strong><span>Check and select tracks</span></a></li><li data-stage="publish"><a href="#publish-heading"><strong>5 · Publish</strong><span>Send to the backend</span></a></li></ol>

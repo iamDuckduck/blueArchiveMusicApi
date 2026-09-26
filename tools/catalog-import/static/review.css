@@ -181,6 +181,7 @@ h3 {
   background:var(--pale);
   color:var(--blue)
 }
+[data-view][aria-pressed="true"] { background:var(--pale); color:var(--blue); border-color:var(--blue) }
 .count {
   margin-left:auto;
   font-size:11px;

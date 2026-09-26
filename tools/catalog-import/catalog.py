@@ -149,7 +149,7 @@ class Catalog:
 
     def view(self):
         state = self.read()
-        return {"scan": state["scan"], "snapshot_count": len(state["snapshots"]),
+        return {"scan": state["scan"], "snapshot_count": len(state["snapshots"]), "reviews": self.saved_reviews(),
                 "candidates": [dict(id=c["id"], source_album=c["source_album"], kind=c["kind"],
                                     decision=c["decision"], track_count=len(c["records"]),
                                     change_count=len(c["changes"]), seen_in_latest_scan=c["seen_in_latest_scan"],
@@ -159,24 +159,25 @@ class Catalog:
 
     def saved_reviews(self):
         """List existing drafts without opening/recovering or creating a Store."""
-        locations = [(self.directory / "reviews.sqlite3", "/")]
+        locations = [("veritas-vol-2", self.directory / "reviews.sqlite3")]
         for identity, candidate in self.read()["candidates"].items():
             if (identity == "veritas-vol-2" or candidate.get("redirect_to")
                     or candidate["kind"] != "release_candidate" or candidate["decision"] == "grouping"):
                 continue
             database = (self.directory / "releases" / identity / "reviews.sqlite3").resolve()
             if database.is_relative_to(self.directory / "releases"):
-                locations.append((database, f"/albums/{identity}/"))
+                locations.append((identity, database))
         result = []
-        for database, url in locations:
+        for identity, database in locations:
             if not database.is_file():
                 continue
             with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as connection:
                 row = connection.execute("SELECT payload FROM review WHERE id=1").fetchone()
             saved = json.loads(row[0])
             fields = saved["album"]["suggestions"] | saved["album"]["edits"]
-            result.append({"title": fields["title"], "category": fields["category"],
-                           "track_count": len(saved["tracks"]), "url": url})
+            result.append({"id": identity, "title": fields["title"], "category": fields["category"],
+                           "decision": saved["album"]["decision"],
+                           "track_count": len(saved["tracks"]), "url": f"/albums/{identity}/"})
         return sorted(result, key=lambda review: review["title"].casefold())
 
     def decide(self, identity, decision):

@@ -13,7 +13,7 @@ def track(identity, album="Official single", title="Music"):
 
 
 def page(number, rows):
-    return Mock(json=lambda: {"success": True, "data": {"max_page": number, "music": rows}})
+    return Mock(status_code=200, json=lambda: {"success": True, "data": {"max_page": number, "music": rows}})
 
 
 class DiscoveryTests(unittest.TestCase):
@@ -23,7 +23,7 @@ class DiscoveryTests(unittest.TestCase):
         self.catalog = Catalog(self.temp.name)
 
     def test_full_pagination_without_old_series_or_duration_filters(self):
-        with patch("catalog.requests.get", side_effect=[page(2, [track(1, "OST")]), page(2, [track(2, "New single")])]) as get:
+        with patch("sources.requests.get", side_effect=[page(2, [track(1, "OST")]), page(2, [track(2, "New single")])]) as get:
             records = fetch_index()
         self.assertEqual([r["id"] for r in records], [1, 2])
         self.assertEqual(get.call_args_list[1].kwargs["params"], {"page": 2, "page_size": 100})
@@ -31,7 +31,7 @@ class DiscoveryTests(unittest.TestCase):
     def test_invalid_empty_repeated_or_changing_pages_fail_closed(self):
         for responses in [[page(1, [])], [page(2, [track(1)]), page(2, [track(1)])],
                           [page(2, [track(1)]), page(3, [track(2)])]]:
-            with self.subTest(responses=responses), patch("catalog.requests.get", side_effect=responses):
+            with self.subTest(responses=responses), patch("sources.requests.get", side_effect=responses):
                 with self.assertRaises(ValueError):
                     fetch_index()
 

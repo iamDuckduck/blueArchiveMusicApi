@@ -131,7 +131,8 @@ h3 {
   background:var(--surface);
   border-right:1px solid var(--line);
   display:flex;
-  flex-direction:column
+  flex-direction:column;
+  overflow-y:auto
 }
 .brand {
   display:flex;
@@ -144,6 +145,7 @@ h3 {
   margin-bottom:54px
 }
 .brand-icon {
+  flex-shrink:0;
   width:35px;
   height:39px;
   border-radius:11px;
@@ -686,6 +688,7 @@ summary {
   }
   .sidebar .brand { margin-bottom:12px }
   .sidebar nav { display:flex; flex-wrap:wrap; gap:4px }
+  .sidebar-note { margin-top:16px }
   main {
     margin:0
   }

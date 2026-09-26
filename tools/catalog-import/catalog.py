@@ -10,9 +10,7 @@ from contextlib import closing, contextmanager
 from pathlib import Path
 from urllib.parse import urlparse
 
-import requests
-
-from sources import HEADERS
+from sources import kivo_response
 from store import Store, initial_review, now
 
 KIVO_INDEX = "https://api.kivo.wiki/api/v1/musics/"
@@ -34,10 +32,12 @@ def fetch_index(progress=lambda message: None):
     page = 1
     while pages is None or page <= pages:
         progress(f"Reading Kivo index page {page}" + (f" of {pages}" if pages else ""))
-        response = requests.get(KIVO_INDEX, params={"page": page, "page_size": 100},
-                                headers=HEADERS, timeout=(10, 30), allow_redirects=False)
-        response.raise_for_status()
-        payload = response.json()
+        response = kivo_response(KIVO_INDEX, params={"page": page, "page_size": 100},
+                                 progress=lambda message: progress(f"Page {page}: {message}"))
+        try:
+            payload = response.json()
+        finally:
+            response.close()
         data = payload.get("data")
         if payload.get("success") is not True or not isinstance(data, dict):
             raise ValueError("Kivo did not return a successful index. Saved candidates were not changed.")

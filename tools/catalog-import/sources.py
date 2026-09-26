@@ -2,6 +2,7 @@
 
 import json
 import re
+import time
 from html import unescape
 from html.parser import HTMLParser
 from urllib.parse import urlparse
@@ -13,6 +14,31 @@ from store import now
 KIVO_API = "https://api.kivo.wiki/api/v1/musics/{}"
 GAMEKEE_PAGE = "https://www.gamekee.com/ba/691994.html"
 HEADERS = {"User-Agent": "BlueArchiveCatalogReview/0.1 (local operator tool)"}
+
+
+def kivo_response(url, *, params=None, progress=lambda message: None):
+    """Retry only transient, read-only Kivo requests; never publication writes."""
+    for attempt in range(1, 4):
+        response = None
+        try:
+            response = requests.get(url, params=params, headers=HEADERS,
+                                    timeout=(10, 30), allow_redirects=False)
+            if response.status_code in {502, 503, 504}:
+                raise requests.ConnectionError("Kivo temporarily unavailable")
+            response.raise_for_status()
+            if 300 <= response.status_code < 400:
+                raise ValueError("Kivo redirected the request. Open its reference manually.")
+            return response
+        except requests.exceptions.SSLError:
+            raise ValueError("Kivo's secure connection could not be verified. Check your network; certificate checks remain enabled.") from None
+        except (requests.Timeout, requests.ConnectionError):
+            if attempt == 3:
+                raise ValueError("Kivo did not respond reliably after 3 attempts. Saved review corrections are kept. Try again later.") from None
+            progress(f"Kivo connection interrupted. Retrying ({attempt + 1}/3)…")
+            time.sleep(attempt)
+        finally:
+            if response is not None and response.status_code != 200:
+                response.close()
 
 
 def absolute_url(value):
@@ -42,7 +68,11 @@ def source_json(url, headers, timeout):
 def fetch_kivo(track_id):
     if type(track_id) is not int or track_id < 1:
         raise ValueError("Choose a positive Kivo track ID.")
-    payload = source_json(KIVO_API.format(track_id), HEADERS, (10, 30))
+    response = kivo_response(KIVO_API.format(track_id))
+    try:
+        payload = response.json()
+    finally:
+        response.close()
     if not isinstance(payload, dict):
         raise ValueError("Kivo returned an unexpected record.")
     data = payload.get("data")

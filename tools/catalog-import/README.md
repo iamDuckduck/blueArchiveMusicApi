@@ -24,6 +24,13 @@ includes a candidate and opens its review; **Continue review** resumes the same 
 Source groups and linked labels remain separately inspectable. The old `/reviews`
 bookmark redirects to the saved filter. Saved means a local draft, not published.
 
+Kivo index and track-detail requests retry transient connection failures, timeouts,
+and HTTP 502/503/504 responses up to three total attempts, with 1- and 2-second
+pauses. Each attempt keeps a 10-second connection and 30-second read timeout.
+Scanning shows retry progress and only replaces the catalog after all pages pass
+validation. Exhausted retries keep saved corrections and report a readable error.
+These retries do not apply to publishing, audio downloads, or GameKee requests.
+
 Fetching reads source metadata and file URLs. Preparation downloads and validates
 those files, reads embedded tags and creates 400/800 px cover copies. GameKee
 requests can fail; the saved error and manual reference remain available.

@@ -5,7 +5,7 @@ import logging
 import os
 from pathlib import Path
 
-from flask import Flask, abort, g, jsonify, render_template, request, send_file
+from flask import Flask, abort, g, jsonify, redirect, render_template, request, send_file
 from werkzeug.local import LocalProxy
 
 from service import ReviewService
@@ -81,8 +81,9 @@ def create_app(data_dir=None, backend_url="http://127.0.0.1:8080", api_key=None)
 
     @app.get("/")
     def index():
-        if g.review_prefix:
-            catalog.sync_review(store)
+        if not g.review_prefix:
+            return redirect("/catalog")
+        catalog.sync_review(store)
         return render_template("index.html", review_prefix=g.review_prefix)
 
     @app.get("/catalog")
@@ -91,7 +92,7 @@ def create_app(data_dir=None, backend_url="http://127.0.0.1:8080", api_key=None)
 
     @app.get("/reviews")
     def saved_reviews_page():
-        return render_template("reviews.html", reviews=catalog.saved_reviews())
+        return redirect("/catalog?view=saved")
 
     @app.get("/api/catalog")
     def candidates():

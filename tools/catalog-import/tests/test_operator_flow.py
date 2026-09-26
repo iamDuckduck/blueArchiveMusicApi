@@ -55,11 +55,12 @@ class OfficialSongCollectionTests(unittest.TestCase):
     def test_pages_explain_local_boundary_and_put_review_before_publish(self):
         client = create_app(self.temp.name).test_client()
         discovery = client.get("/catalog").get_data(as_text=True)
-        page = client.get("/").get_data(as_text=True)
-        for text in ["Blue Archive Global songs", "Import stages"]:
+        page = client.get("/albums/veritas-vol-2/").get_data(as_text=True)
+        for text in ["Blue Archive Global songs"]:
             self.assertIn(text, discovery)
             self.assertIn(text, page)
-        self.assertIn("standalone songs", discovery)
+        self.assertIn("Scanning does not download or publish music.", discovery)
+        self.assertIn("Import stages", page)
         self.assertIn("What do these choices mean?", discovery)
         self.assertIn("Save changes keeps your local draft. It does not publish.", page)
         self.assertLess(page.index('id="tracks"'), page.index('id="publish-heading"'))

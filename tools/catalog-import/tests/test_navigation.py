@@ -38,12 +38,11 @@ class NavigationTests(unittest.TestCase):
             catalog.merge([{"id": 197, "title": "Thanks to EN", "album": "Thanks to"}])
             identity = catalog.view()["candidates"][0]["id"]
             catalog.open_review(identity)
-            pages = [("/catalog", "/catalog", "page"), ("/reviews", "/reviews", "page"),
-                     ("/credits", "/credits", "page"), ("/", "/reviews", "location"),
-                     ("/albums/veritas-vol-2/", "/reviews", "location"),
-                     (f"/albums/{identity}/", "/reviews", "location")]
-            expected = [("/catalog", "Blue Archive Music"), ("/catalog", "Album discovery"),
-                        ("/reviews", "Saved reviews"), ("/credits", "Credit aliases")]
+            pages = [("/catalog", "/catalog", "page"), ("/credits", "/credits", "page"),
+                     ("/albums/veritas-vol-2/", "/catalog", "location"),
+                     (f"/albums/{identity}/", "/catalog", "location")]
+            expected = [("/catalog", "Blue Archive Music"), ("/catalog", "Albums"),
+                        ("/credits", "Credit aliases")]
             for url, current, kind in pages:
                 with self.subTest(url=url):
                     response = client.get(url)

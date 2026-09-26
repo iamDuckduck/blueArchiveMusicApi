@@ -613,7 +613,7 @@ class BrowserApiTests(unittest.TestCase):
         self.store = self.app.extensions["review_store"]
 
     def test_page_and_edit_round_trip(self):
-        response = self.client.get("/")
+        response = self.client.get("/albums/veritas-vol-2/")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Album review", response.data)
         response = self.client.put("/api/review", json={"tracks": {"255": {"notes": "Checked locally"}}})
@@ -621,12 +621,12 @@ class BrowserApiTests(unittest.TestCase):
         self.assertEqual(find_track(response.json, 255)["fields"]["notes"], "Checked locally")
 
     def test_comparison_controls_load_without_demo_scaffolding(self):
-        page = self.client.get("/").get_data(as_text=True)
+        page = self.client.get("/albums/veritas-vol-2/").get_data(as_text=True)
         self.assertLess(page.index("published-comparison.js"), page.index("review.js"))
         self.assertIn('id="published-panel"', page)
         self.assertIn('id="publication-progress"', page)
         self.assertIn('id="show-matching"', page)
-        self.assertIn('<a href="/catalog">Catalog</a>', page)
+        self.assertIn('<a href="/catalog">Albums</a>', page)
         self.assertNotIn("demo-toolbar", page)
         for path in ["/static/published-comparison.js", "/static/review.js", "/static/review.css"]:
             response = self.client.get(path)

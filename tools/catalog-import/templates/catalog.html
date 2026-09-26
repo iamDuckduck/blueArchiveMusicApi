@@ -2,17 +2,21 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Album discovery · Blue Archive Music</title>
+  <title>Albums · Blue Archive Music</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='review.css') }}">
+  <script src="{{ url_for('static', filename='catalog-home.js') }}" defer></script>
   <script src="{{ url_for('static', filename='catalog.js') }}" defer></script>
 </head>
 <body>
   {% with navigation_section='catalog' %}{% include '_navigation.html' %}{% endwith %}
-  <main class="catalog-page"><header class="topbar"><span>Catalog / Album discovery</span><a href="/reviews">Saved reviews</a></header><div class="page-content">
-    <h1>Find music for your catalog.</h1>
-    <p>Review official albums, singles, or standalone songs. A named collection can hold song versions without claiming a formal album release.</p>
-    <ol class="workflow-steps" aria-label="Import stages"><li aria-current="step"><strong>1 · Scan</strong><span>Find source groups</span></li><li><strong>2 · Include</strong><span>Choose music to review</span></li><li><strong>3 · Prepare</strong><span>Download local files</span></li><li><strong>4 · Review</strong><span>Check and select tracks</span></li><li><strong>5 · Publish</strong><span>Send to the backend</span></li></ol>
-    <section class="panel"><button class="button primary" id="scan" type="button">Scan Kivo index</button><p id="scan-status" role="status"></p><label>Filter candidates<input id="filter" type="search" placeholder="Album title or decision"></label></section>
+  <main class="catalog-page"><header class="topbar"><span>Albums</span></header><div class="page-content">
+    <h1>Albums</h1>
+    <p>Find new music or continue a saved review.</p>
+    <section class="panel"><button class="button primary" id="scan" type="button">Scan Kivo</button><p id="scan-status" role="status"></p><label>Find an album<input id="filter" type="search" placeholder="Album title or decision"></label>
+      <div class="album-actions" role="group" aria-label="Album filters"><button class="button secondary" data-view="all" aria-pressed="true">All</button><button class="button secondary" data-view="new" aria-pressed="false">New</button><button class="button secondary" data-view="saved" aria-pressed="false">Saved reviews</button><button class="button secondary" data-view="skipped" aria-pressed="false">Skipped</button></div>
+      <p class="helper">Scanning does not download or publish music.</p>
+    </section>
+    <p id="notice" role="status" hidden></p><div id="candidates"><p>Loading albums…</p></div>
     <section class="panel"><details><summary>What do these choices mean?</summary>
       <dl class="decision-guide"><dt>Include</dt><dd>Save this choice and open its local review. No download or publication yet.</dd><dt>Needs review</dt><dd>Keep the candidate undecided for later.</dd><dt>Skip</dt><dd>Choose not to import it for now. This is remembered and can be changed.</dd><dt>Source grouping</dt><dd>The source label is a broad collection, such as all in-game music, not one album. Its tracks can still be mapped into a named collection.</dd></dl>
       <p class="helper">Rescanning keeps these choices and your saved corrections. Missing source entries are retained, not deleted.</p>
@@ -25,7 +29,6 @@
         <button class="button primary" type="submit">Save collection draft</button>
       </form><p class="helper">For example, group the English and Korean versions of “Thanks to” together. Create once, then inspect a source group and map selected tracks into it. This does not download or publish music.</p>
     </details></section>
-    <p id="notice" role="status" hidden></p><div id="candidates"></div>
   </div></main>
 </body>
 </html>

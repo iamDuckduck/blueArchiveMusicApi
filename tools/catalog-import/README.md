@@ -142,7 +142,21 @@ Never expose R2 credentials in frontend variables. Chapter 17 below verifies the
 backend/storage flow with PostgreSQL/MinIO; development-R2 browser playback is
 still a separate check.
 
-## Full-pipeline verification (chapter 17)
+## Automated testing: end-to-end integration (chapter 17)
+
+Use this when changing publishing, storage or retry behavior, not whenever you
+start the app. Two files configure different parts of this test setup:
+
+| File | Job |
+| --- | --- |
+| `compose.e2e-test.yaml` | Docker starts test PostgreSQL and MinIO (local file storage). |
+| `application-e2e-test.yaml` | Spring Boot connects the test backend to those services. |
+
+The Python verifier copies a saved review, publishes through the real backend,
+then checks the saved records, uploaded files and safe retries. Your original
+review stays unchanged. The existing Docker project, database, bucket and volume
+names still contain `verify`; only the configuration filenames/profile changed.
+Rebuild the backend jar after updating these files. No data migration is needed.
 
 This is a separate automated test setup, not a replacement for development R2.
 The intended local services are PostgreSQL on `127.0.0.1:15433`, MinIO on
@@ -179,7 +193,7 @@ Docker context; on Linux use `unix:///var/run/docker.sock` instead.
 
 ```powershell
 $verifyDockerHost = 'npipe:////./pipe/docker_engine'
-docker --host $verifyDockerHost compose -p catalog-import-verify -f tools/catalog-import/compose.verify.yaml up -d
+docker --host $verifyDockerHost compose -p catalog-import-verify -f tools/catalog-import/compose.e2e-test.yaml up -d
 docker --host $verifyDockerHost exec -e MC_HOST_verify=http://catalog_verify:catalog-verify-local-only@127.0.0.1:9000 catalog-import-verify-storage-1 mc mb --ignore-existing verify/catalog-import-verify
 docker --host $verifyDockerHost exec -e MC_HOST_verify=http://catalog_verify:catalog-verify-local-only@127.0.0.1:9000 catalog-import-verify-storage-1 mc anonymous set download verify/catalog-import-verify
 $env:CATALOG_R2_SMOKE = 'false'
@@ -191,7 +205,7 @@ Run each command only after the previous one succeeds. The fixed local bucket
 permits anonymous downloads for the HTTP media checks, not anonymous uploads.
 Do not use `mvn clean`: ignored `target/` can contain saved reviews and evidence.
 
-The verifier starts/stops its own API with the standalone `catalog-verify`
+The verifier starts/stops its own API with the standalone `e2e-test`
 profile. It pins the effective database/storage properties on the Java command
 line and limits inherited environment variables; no development/production R2
 credentials are needed. It also targets only the local Docker engine and bypasses
@@ -203,7 +217,7 @@ Reports, backend logs and the copied review stay under ignored
 two test containers afterward without deleting their data:
 
 ```powershell
-docker --host $verifyDockerHost compose -p catalog-import-verify -f tools/catalog-import/compose.verify.yaml stop
+docker --host $verifyDockerHost compose -p catalog-import-verify -f tools/catalog-import/compose.e2e-test.yaml stop
 ```
 
 MinIO tests the backend's S3-compatible storage path, not Cloudflare-specific

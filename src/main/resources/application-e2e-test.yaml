@@ -1,4 +1,5 @@
-# Standalone verification profile. Run through tools/catalog-import/verify_live.py
+# Automated end-to-end test profile, not everyday development.
+# Run through tools/catalog-import/verify_live.py
 # so inherited environment variables cannot redirect these local destinations.
 server:
   address: 127.0.0.1

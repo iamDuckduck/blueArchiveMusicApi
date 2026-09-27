@@ -1,6 +1,6 @@
-"""Bounded, repeatable Veritas check. Writes ONLY the fixed catalog-verify environment.
+"""Bounded, repeatable Veritas check. Writes ONLY the fixed local end-to-end test environment.
 
-Run compose.verify.yaml first, initialize its test bucket (README), then build the jar.
+Run compose.e2e-test.yaml first, initialize its test bucket (README), then build the jar.
 Uses a copied review and validated media; never mutates the owner's saved review.
 """
 
@@ -44,8 +44,8 @@ def local_environment():
 
 def server_arguments(java):
     return [str(java), "-jar", str(JAR),
-        "--spring.config.location=classpath:/application.yaml,classpath:/application-catalog-verify.yaml",
-        "--spring.profiles.active=catalog-verify", "--spring.profiles.include=",
+        "--spring.config.location=classpath:/application.yaml,classpath:/application-e2e-test.yaml",
+        "--spring.profiles.active=e2e-test", "--spring.profiles.include=",
         "--server.address=127.0.0.1", "--server.port=18082",
         "--spring.datasource.url=jdbc:postgresql://127.0.0.1:15433/catalog_import_verify",
         "--spring.datasource.username=catalog_verify", "--spring.datasource.password=catalog-verify-local-only",

@@ -1,3 +1,5 @@
+# Automated end-to-end test services, not everyday development.
+# Keep the existing project/volume names to preserve test data across this rename.
 # Separate project, ports and volumes: never points at the normal development catalog.
 name: catalog-import-verify
 services:

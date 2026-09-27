@@ -1,12 +1,13 @@
 # Local catalog review
 
-Reviewed base: `review/catalog-import-approved`. Follow-up work is on
-`feature/catalog-pipeline-finish`; this worktree adds `feature/catalog-credits-search`.
+The catalog pipeline, credits and search are merged into the backend.
 Start with the [short operator guide](OPERATOR-GUIDE.md),
 then [progress and remaining work](PIPELINE.md) or the [17-chapter reading guide](HISTORY.md).
 For the next stage, read [credit profiles, aliases and search](CREDITS-GUIDE.md).
 
-Requires Python 3.11+, FFmpeg and FFprobe on PATH. From this directory:
+For everyday startup, follow the [repository development guide](../../README.md#local-development)
+and use `scripts/dev.ps1`. For a standalone tool session, Python 3.11+, FFmpeg and
+FFprobe are required on PATH. From this directory:
 
 ```powershell
 python -m pip install -r requirements.txt
@@ -55,8 +56,8 @@ review and published-version comparison are included through chapter 16.
 | --- | --- | --- |
 | Ordinary automated tests | Test-only H2 / temporary SQLite reviews | Mocked storage and temporary files; no cloud bucket |
 | Full-pipeline failure/retry tests (chapter 17) | Separate local PostgreSQL: `catalog_import_verify` | Separate local MinIO bucket: `catalog-import-verify` |
-| Credits/search verification on this branch | Fresh local PostgreSQL: `catalog_credits_verify_<id>` | Same local MinIO test bucket; new import identity |
-| Everyday development, including manually testing the app | Development PostgreSQL | Dedicated **development R2 bucket** |
+| Credits/search verification | Fresh local PostgreSQL: `catalog_credits_verify_<id>` | Same local MinIO test bucket; new import identity |
+| Everyday development, including manually testing the app | `blue_archive_api` at `localhost:5433` | **`bluearchive-music-dev` R2 bucket** |
 | Production | Production database | Separate **production R2 bucket** |
 
 MinIO runs on your computer in Docker and provides an S3-compatible storage API.
@@ -65,48 +66,52 @@ Cloudflare bucket for chapter 17. Manual app testing remains part of development
 MinIO belongs to the separate verification setup, which can also support a
 deliberate browser check against those same test services.
 
-This branch adds migration V1.11. Use `verify_credits.py` for its separate test
-database, as described in the credits guide. Running `verify_live.py` from this
-branch would upgrade the older `catalog_import_verify` database to V1.11; do not
-do that when preserving the pipeline branch's preview. Starting this branch with
-normal development settings would likewise migrate that selected database.
+The end-to-end verifiers apply migrations only to their explicitly selected local
+test database: `verify_live.py` uses `catalog_import_verify`, while
+`verify_credits.py` creates `catalog_credits_verify_<id>`. Their launch settings
+pin PostgreSQL/MinIO destinations independently of the development environment.
 
 The explicit real-R2 smoke check below is an exception to offline tests: it uses
 the development R2 bucket to check the actual cloud configuration.
 
 ### Set up everyday development
 
+For the repeatable Windows startup procedure, use the
+[repository development guide](../../README.md#local-development). Its
+`scripts/dev.ps1 -Service catalog` command selects port `8765`, the backend at
+`127.0.0.1:8080`, and this directory's `data/`, and passes the backend admin key
+privately. Use `-ReviewDirectory` to retain a saved review directory elsewhere.
+
 Everyday local development and manual testing use the normal `dev` profile:
 development PostgreSQL and a dedicated development R2 bucket. There is
 no separate H2/local-media backend profile or backend `/media/` route.
 Production uses the `prod` profile with its own database and R2 settings.
 
-Load the backend's ignored environment file through your IDE/run configuration;
-Spring Boot does not automatically load arbitrary `.env` files. Use these existing
-variables (never commit real credentials):
+The launcher loads the backend's ignored `.env.local`; Spring Boot itself does not
+automatically load arbitrary `.env` files. Use these settings (never commit real
+credentials):
 
 ```dotenv
 SPRING_PROFILES_ACTIVE=dev
-POSTGRES_DB=<development-database>
-POSTGRES_DATASOURCE_URL=jdbc:postgresql://localhost:5433/<development-database>
+POSTGRES_DB=blue_archive_api
+POSTGRES_DATASOURCE_URL=jdbc:postgresql://localhost:5433/blue_archive_api
 POSTGRES_USER=<development-user>
 POSTGRES_PASSWORD=<development-password>
 R2_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
 R2_BUCKET=bluearchive-music-dev
 R2_ACCESS_KEY=<development-bucket-only-access-key>
 R2_SECRET_KEY=<development-bucket-only-secret>
+ADMIN_API_KEY=<local-admin-key>
 ```
 
-The bundled `compose.yaml` exposes PostgreSQL on host port `5433` and uses
-`POSTGRES_DB` to choose its database. Keep the URL's database name consistent.
-If you manage PostgreSQL elsewhere, use that service's actual host/port instead.
+The bundled `compose.yaml` exposes PostgreSQL on host port `5433`. The launcher
+uses Compose project `bluearchivemusicapi`, preserving its existing database volume.
 
 Use a token scoped only to the development bucket. Profile names do not enforce
 isolation: check database and bucket values before a run. Do not load production
-credentials into the development process. Start with `mvn spring-boot:run` after
-loading the environment. The existing dev profile starts Docker Compose; if
-your development services are already managed elsewhere, set
-`SPRING_DOCKER_COMPOSE_ENABLED=false`.
+credentials into the development process. Start the database and backend with
+`scripts/dev.ps1 -Service database` and `scripts/dev.ps1 -Service backend`.
+The launcher disables Spring's automatic Compose lifecycle management.
 
 The storage component uses the selected R2 bucket and immutable keys of the form
 `catalog/<identity-hash>/<content-hash>.<extension>`. Both images and audio use
@@ -128,19 +133,21 @@ and reports the CORS response for `http://localhost:5173`. It retains the object
 does not start a database, and does not prove browser playback or token scope.
 Unset `CATALOG_R2_SMOKE` afterward; ordinary test runs skip this network check.
 
-Review check (2026-09-14): the development R2 upload, unchanged retry and public
-MP3 byte-range checks passed with reviewed Veritas 255 audio. The stable smoke
-object is retained in the development bucket. The public response did not include
-`Access-Control-Allow-Origin` for `http://localhost:5173`; browser CORS behavior
-and full app playback remain unverified. No database or production writes were made.
+Development confirmation (2026-09-27): fresh `blue_archive_api` on port `5433`
+applied migrations V1.1 through V1.11. The saved Veritas review published two tracks
+using `bluearchive-music-dev`; browser playback advanced to 30 seconds without
+a media error. Unchanged publication retained IDs and revisions. An album-title
+correction appeared in the app and was then restored, with play counts preserved.
+This confirms the tested playback flow; it does not verify token scope or imply
+any change to R2 CORS headers.
 
 Storage was introduced in chapter 5, the import API in chapter 6, and the
 review tool's Publish button in chapter 7.
 The later frontend media resolver needs `VITE_PUBLIC_MEDIA_BASE_URL` pointing to
 the development bucket's public URL, not the authenticated R2 upload endpoint.
 Never expose R2 credentials in frontend variables. Chapter 17 below verifies the
-backend/storage flow with PostgreSQL/MinIO; development-R2 browser playback is
-still a separate check.
+backend/storage flow with PostgreSQL/MinIO; the development-R2 browser check above
+is separate from those automated tests.
 
 ## Automated testing: end-to-end integration (chapter 17)
 
@@ -266,7 +273,7 @@ It verifies authentication, album-before-track validation,
 repeated publication, public album metadata, stable IDs/credits/play counts and
 unchanged stored bytes. It does not call real R2, PostgreSQL or a browser, and it
 does not reintroduce the removed local-media route. Revision checks are described
-below; full publish-to-player verification remains later review work.
+below; the development publish-to-player result is recorded above.
 
 ## Outdated publication protection (chapter 15)
 
@@ -317,9 +324,10 @@ pending Redis counts or remove any running Redis service or stored data.
 
 ## Publish selected reviewed tracks
 
-Start the backend with its normal development settings above, including
-`ADMIN_API_KEY`. Load these variables into the Python process (it does not
-automatically read a `.env` file):
+Use `scripts/dev.ps1 -Service catalog` from the backend root for everyday
+publication; it maps the backend admin key into the Python process. For a manual
+launch, start the backend with its development settings including `ADMIN_API_KEY`,
+then load these variables into Python (it does not automatically read `.env`):
 
 ```dotenv
 CATALOG_IMPORT_BACKEND_URL=http://127.0.0.1:8080
@@ -338,7 +346,8 @@ retrying sends the same identities again so the API can reuse records and media.
 Fetching, preparation and saving edits alone do not publish anything.
 
 The publisher's unit tests mock the HTTP backend. Chapter 17 adds real
-PostgreSQL/MinIO retry verification; actual R2/browser playback remains separate.
+PostgreSQL/MinIO retry verification; the development-R2/browser result is recorded
+above.
 ## Discover candidates
 
 Open `/catalog` and scan Kivo to read every index page. Include, skip or mark candidates as source groupings. Failed or inconsistent scans retain the previous complete scan. Open a release candidate's saved review to inspect and correct it separately.
